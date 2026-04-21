@@ -1,0 +1,2663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>departure — mobile</title>
+  <style>
+    :root {
+      --color-warm: #ffb15a;
+      --color-warm-dim: rgba(255, 177, 90, 0.6);
+      --color-cool: #6fd0ff;
+      --color-cool-dim: rgba(111, 208, 255, 0.6);
+      --bg: #020309;
+      --error: #ff5a5a;
+      --font-mono: system-ui, -apple-system, BlinkMacSystemFont, "Space Mono", Menlo, monospace;
+      --font-serif: "IM Fell English", "Times New Roman", serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--color-warm);
+      font-family: var(--font-mono);
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 480px;
+      max-height: 100vh;
+      background: #000;
+      color: var(--color-warm);
+      overflow: hidden;
+    }
+
+    /* HUD 边框 */
+    .hud-corner {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-color: rgba(255, 255, 255, 0.16);
+      z-index: 10;
+    }
+    .hud-tl {
+      top: 10px;
+      left: 10px;
+      border-top: 1px solid currentColor;
+      border-left: 1px solid currentColor;
+    }
+    .hud-tr {
+      top: 10px;
+      right: 10px;
+      border-top: 1px solid currentColor;
+      border-right: 1px solid currentColor;
+    }
+    .hud-bl {
+      bottom: 26px;
+      left: 10px;
+      border-bottom: 1px solid currentColor;
+      border-left: 1px solid currentColor;
+    }
+    .hud-br {
+      bottom: 26px;
+      right: 10px;
+      border-bottom: 1px solid currentColor;
+      border-right: 1px solid currentColor;
+    }
+
+    .noise-overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      opacity: 0.12;
+      background-image:
+        radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.2) 0, transparent 40%),
+        radial-gradient(circle at 80% 0%, rgba(255, 255, 255, 0.07) 0, transparent 45%),
+        radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.12) 0, transparent 35%);
+      mix-blend-mode: screen;
+      animation: noiseShift 6s linear infinite alternate;
+    }
+
+    @keyframes noiseShift {
+      from { transform: translate3d(0, 0, 0); }
+      to   { transform: translate3d(-10px, 10px, 0); }
+    }
+
+    @keyframes scanlines {
+      0%   { background-position-y: 0; }
+      100% { background-position-y: 6px; }
+    }
+
+    .scanlines {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.4) 50%,
+        rgba(0, 0, 0, 0) 50%
+      );
+      background-size: 100% 4px;
+      opacity: 0;
+      mix-blend-mode: multiply;
+      animation: scanlines 0.35s linear infinite;
+    }
+
+    .app.phase-2 .scanlines,
+    .app.phase-3-camera .scanlines {
+      opacity: 0.28;
+    }
+
+    /* Phase 3 相机：2001「星门/眼球」式假彩色氛围（替代纯黑留白） */
+    @keyframes stargateEyeAppBg {
+      0% { background-position: 0% 40%; }
+      100% { background-position: 100% 60%; }
+    }
+
+    @keyframes cameraChromaDrift {
+      0% { opacity: 0.74; transform: scale(1); }
+      100% { opacity: 0.9; transform: scale(1.03); }
+    }
+
+    .app.phase-3-camera {
+      background: linear-gradient(
+        125deg,
+        #060210 0%,
+        #1a0530 14%,
+        #0a1628 28%,
+        #240818 42%,
+        #022830 58%,
+        #200828 72%,
+        #08031a 86%,
+        #060210 100%
+      );
+      background-size: 450% 450%;
+      animation: stargateEyeAppBg 22s ease-in-out infinite alternate;
+    }
+
+    .app.phase-3-camera .center-console {
+      background:
+        radial-gradient(ellipse 130% 90% at 48% 42%, rgba(220, 0, 180, 0.22) 0%, transparent 55%),
+        radial-gradient(ellipse 80% 70% at 72% 58%, rgba(0, 240, 230, 0.14) 0%, transparent 50%),
+        radial-gradient(ellipse 70% 50% at 18% 65%, rgba(120, 0, 200, 0.18) 0%, transparent 48%),
+        transparent;
+    }
+
+    .app.phase-3-camera .text-console {
+      background: linear-gradient(
+        165deg,
+        rgba(40, 0, 55, 0.55) 0%,
+        rgba(0, 35, 48, 0.4) 50%,
+        rgba(55, 0, 40, 0.5) 100%
+      );
+      box-shadow: 0 0 0 1px rgba(255, 0, 200, 0.12);
+    }
+
+    .app.phase-3-camera .camera-view {
+      background:
+        radial-gradient(ellipse 100% 70% at 50% 0%, rgba(255, 0, 210, 0.2) 0%, transparent 45%),
+        radial-gradient(ellipse 90% 60% at 50% 100%, rgba(0, 255, 245, 0.12) 0%, transparent 50%);
+    }
+
+    .app.phase-3-camera .camera-inner {
+      background: linear-gradient(160deg, #12021c 0%, #030814 45%, #050218 100%);
+      box-shadow:
+        0 0 0 1px rgba(255, 80, 200, 0.35),
+        0 0 28px rgba(0, 220, 255, 0.12),
+        0 14px 32px rgba(0, 0, 0, 0.85);
+    }
+
+    .app.phase-3-camera .camera-inner > video {
+      position: absolute;
+      z-index: 0;
+      opacity: 0;
+    }
+
+    .app.phase-3-camera .camera-inner::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 38% 46%, rgba(255, 0, 200, 0.5) 0%, transparent 45%),
+        radial-gradient(circle at 64% 50%, rgba(0, 255, 240, 0.4) 0%, transparent 42%),
+        linear-gradient(110deg, rgba(160, 0, 140, 0.35) 0%, rgba(0, 60, 90, 0.25) 100%);
+      mix-blend-mode: hard-light;
+      animation: cameraChromaDrift 7s ease-in-out infinite alternate;
+    }
+
+    .app.phase-3-camera .camera-overlay {
+      z-index: 2;
+    }
+
+    .app.phase-3-camera .camera-frame-corner {
+      border-color: rgba(255, 100, 220, 0.75);
+      filter: drop-shadow(0 0 6px rgba(0, 255, 240, 0.35));
+    }
+
+    .app.phase-3-camera .camera-crosshair::before,
+    .app.phase-3-camera .camera-crosshair::after {
+      background: rgba(255, 120, 255, 0.85);
+      box-shadow: 0 0 8px rgba(0, 255, 240, 0.4);
+    }
+
+    .app.phase-3-camera .camera-hud {
+      color: rgba(220, 200, 255, 0.9);
+    }
+
+    .app.phase-3-camera .camera-vignette {
+      background: radial-gradient(
+        circle at 50% 50%,
+        transparent 0,
+        transparent 38%,
+        rgba(80, 0, 90, 0.55) 72%,
+        rgba(10, 0, 35, 0.92) 100%
+      );
+    }
+
+    .app.phase-3-camera .camera-static {
+      background-image:
+        repeating-conic-gradient(
+          from 0deg,
+          rgba(255, 0, 200, 0.12) 0 0.5deg,
+          rgba(0, 255, 240, 0.08) 0.5deg 1deg
+        );
+      mix-blend-mode: soft-light;
+    }
+
+    .app.phase-3-camera .camera-intensity-1 video {
+      filter: grayscale(1) contrast(1.95) brightness(0.9) saturate(0);
+    }
+
+    .app.phase-3-camera .camera-intensity-2 video {
+      filter: grayscale(1) contrast(2.15) brightness(0.86) saturate(0);
+      image-rendering: pixelated;
+    }
+
+    .app.phase-3-camera .camera-intensity-3 video {
+      filter: grayscale(1) contrast(2.35) brightness(0.82) saturate(0);
+      image-rendering: pixelated;
+    }
+
+    .app.phase-4 .scanlines {
+      opacity: 0.2;
+    }
+
+    .content {
+      position: absolute;
+      inset: 0;
+      padding: 16px 14px 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-warm-dim);
+    }
+
+    .phase-label {
+      min-width: 56px;
+    }
+
+    .signal {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 80px;
+      justify-content: flex-end;
+    }
+
+    .signal-bars {
+      display: flex;
+      gap: 1px;
+      height: 8px;
+      align-items: flex-end;
+    }
+
+    .signal-bar {
+      width: 3px;
+      border-radius: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      transition: background 0.3s, height 0.3s;
+    }
+
+    .signal-bar.active {
+      background: var(--color-warm);
+    }
+
+    .signal-label {
+      opacity: 0.7;
+    }
+
+    .timer {
+      font-size: 11px;
+      opacity: 0.65;
+    }
+
+    .middle {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+
+    .telemetry {
+      font-size: 13px;
+      color: var(--color-warm);
+      margin-bottom: 6px;
+      min-height: 80px;
+    }
+
+    .telemetry-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 1px 2px;
+      letter-spacing: 0.06em;
+    }
+
+    .telemetry-label {
+      min-width: 42px;
+    }
+
+    .telemetry-value {
+      text-align: right;
+      max-width: 160px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .telemetry-muted {
+      color: rgba(255, 255, 255, 0.26);
+    }
+
+    .telemetry-error {
+      color: var(--error);
+    }
+
+    .callsign {
+      margin-top: 4px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      opacity: 0.8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .center-console {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .text-console {
+      width: 100%;
+      max-height: 100%;
+      border-radius: 6px;
+      padding: 10px 10px 8px;
+      background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.85));
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+      font-size: 13px;
+      line-height: 1.4;
+      overflow-y: auto;
+      color: var(--color-warm);
+    }
+
+    .text-line {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 7px;
+      background: var(--color-warm);
+      margin-left: 1px;
+      animation: blink 0.9s steps(1) infinite;
+    }
+
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0; }
+    }
+
+    .input-row {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .input-label {
+      opacity: 0.8;
+      white-space: nowrap;
+    }
+
+    .name-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+      color: var(--color-warm);
+      padding: 4px 2px 3px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+
+    .name-input::placeholder {
+      color: rgba(255, 255, 255, 0.2);
+    }
+
+    .button {
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      background: transparent;
+      color: var(--color-warm);
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      cursor: pointer;
+      outline: none;
+      transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.1s;
+    }
+
+    .button:active {
+      transform: scale(0.97);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .button-ghost {
+      border-radius: 3px;
+      padding: 4px 10px;
+    }
+
+    /* 摇杆区 */
+    .joystick-wrapper {
+      height: 46%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      pointer-events: none;
+      position: relative;
+      z-index: 2;
+    }
+
+    .joystick-hint {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      opacity: 0.7;
+      margin-bottom: 8px;
+      animation: hintFade 4s ease-out forwards;
+    }
+
+    @keyframes hintFade {
+      0% { opacity: 0; }
+      10% { opacity: 0.9; }
+      100% { opacity: 0; }
+    }
+
+    .joystick {
+      position: relative;
+      width: 62%;
+      aspect-ratio: 1;
+      max-width: 260px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 20%, #333 0, #050505 55%, #000 100%);
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 20px 40px rgba(0, 0, 0, 0.9);
+      overflow: hidden;
+      pointer-events: auto;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .joystick-circle {
+      position: absolute;
+      inset: 14%;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    .joystick-circle:nth-child(2) {
+      inset: 25%;
+      border-style: dashed;
+      border-color: rgba(255, 255, 255, 0.11);
+    }
+
+    .joystick-circle:nth-child(3) {
+      inset: 36%;
+      border-style: dotted;
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .joystick-cross {
+      position: absolute;
+      inset: 50%;
+      transform: translate(-50%, -50%);
+      width: 40%;
+      height: 40%;
+      pointer-events: none;
+    }
+
+    .joystick-cross::before,
+    .joystick-cross::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .joystick-cross::before {
+      width: 1px;
+      height: 100%;
+    }
+
+    .joystick-cross::after {
+      height: 1px;
+      width: 100%;
+    }
+
+    .joystick-compass-mark {
+      position: absolute;
+      width: 2px;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.3);
+      top: 6%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .joystick-compass-mark.e {
+      top: 50%;
+      right: 6%;
+      left: auto;
+      transform: translateY(-50%) rotate(90deg);
+    }
+
+    .joystick-compass-mark.s {
+      bottom: 6%;
+      top: auto;
+      left: 50%;
+      transform: translateX(-50%) rotate(180deg);
+    }
+
+    .joystick-compass-mark.w {
+      top: 50%;
+      left: 6%;
+      transform: translateY(-50%) rotate(270deg);
+    }
+
+    .joystick-touch {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 0 12px rgba(255, 177, 90, 0.9);
+      background: radial-gradient(circle, rgba(255, 177, 90, 0.85), transparent);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.22s ease-out;
+    }
+
+    .joystick-line {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 1px;
+      transform-origin: 0 50%;
+      background: linear-gradient(to right, rgba(255, 255, 255, 0.0), rgba(255, 177, 90, 0.9));
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.22s ease-out;
+    }
+
+    .joystick-active .joystick-touch,
+    .joystick-active .joystick-line {
+      opacity: 1;
+    }
+
+    /* 进度条 */
+    .bottom {
+      position: relative;
+      height: 18px;
+      margin-top: 4px;
+    }
+
+    .progress-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 4px;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.16);
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0%;
+      background: linear-gradient(to right, rgba(255, 177, 90, 0.4), rgba(255, 177, 90, 0.9));
+      transition: width linear;
+    }
+
+    .app.phase-2 .progress-bar,
+    .app.phase-3 .progress-bar,
+    .app.phase-3-camera .progress-bar,
+    .app.phase-4 .progress-bar {
+      background: linear-gradient(to right, rgba(111, 208, 255, 0.4), rgba(111, 208, 255, 0.9));
+    }
+
+    .progress-glitch {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, rgba(111, 208, 255, 0.8), rgba(111, 208, 255, 0));
+      mix-blend-mode: screen;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .progress-glitch.active {
+      opacity: 1;
+      animation: progressGlitch 0.3s ease-out;
+    }
+
+    @keyframes progressGlitch {
+      0% { transform: translateX(0); opacity: 0.9; }
+      100% { transform: translateX(-18px); opacity: 0; }
+    }
+
+    /* Phase 专用样式 */
+    .app.phase-0 .top-bar,
+    .app.phase-0 .bottom {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .countdown {
+      font-size: 42px;
+      letter-spacing: 0.2em;
+      text-align: center;
+      margin-top: 4px;
+      opacity: 0;
+      transform: scale(0.9);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+
+    .countdown.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .flash {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .flash.active {
+      opacity: 1;
+      animation: flashOut 0.4s ease-out forwards;
+    }
+
+    @keyframes flashOut {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    /* Phase 3 相机 */
+    .camera-view {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .camera-inner {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 9 / 16;
+      max-height: 80%;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.25),
+        0 14px 32px rgba(0, 0, 0, 0.9);
+      background: #000;
+    }
+
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: grayscale(0.9) contrast(1.6) saturate(0.7) hue-rotate(170deg) brightness(0.9);
+      transform: scale(1.08);
+    }
+
+    #cameraRenderCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      object-fit: cover;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .camera-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .camera-frame-corner {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-color: rgba(180, 220, 255, 0.9);
+    }
+
+    .camera-frame-corner.tl {
+      top: 6px;
+      left: 6px;
+      border-top: 2px solid currentColor;
+      border-left: 2px solid currentColor;
+    }
+
+    .camera-frame-corner.tr {
+      top: 6px;
+      right: 6px;
+      border-top: 2px solid currentColor;
+      border-right: 2px solid currentColor;
+    }
+
+    .camera-frame-corner.bl {
+      bottom: 6px;
+      left: 6px;
+      border-bottom: 2px solid currentColor;
+      border-left: 2px solid currentColor;
+    }
+
+    .camera-frame-corner.br {
+      bottom: 6px;
+      right: 6px;
+      border-bottom: 2px solid currentColor;
+      border-right: 2px solid currentColor;
+    }
+
+    .camera-crosshair {
+      position: absolute;
+      inset: 50%;
+      transform: translate(-50%, -50%);
+      width: 14%;
+      height: 14%;
+    }
+
+    .camera-crosshair::before,
+    .camera-crosshair::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(200, 230, 255, 0.9);
+    }
+
+    .camera-crosshair::before {
+      width: 1px;
+      height: 100%;
+    }
+
+    .camera-crosshair::after {
+      width: 100%;
+      height: 1px;
+    }
+
+    .camera-hud {
+      position: absolute;
+      inset: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(200, 230, 255, 0.88);
+    }
+
+    .camera-hud-top,
+    .camera-hud-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .camera-rec {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .camera-rec-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ff3b3b;
+      box-shadow: 0 0 10px rgba(255, 59, 59, 0.9);
+      animation: recBlink 0.8s steps(1) infinite;
+    }
+
+    @keyframes recBlink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0.1; }
+    }
+
+    .camera-static {
+      position: absolute;
+      inset: 0;
+      opacity: 0.2;
+      background-image:
+        repeating-conic-gradient(
+          from 0deg,
+          rgba(255, 255, 255, 0.1) 0 0.5deg,
+          rgba(0, 0, 0, 0.0) 0.5deg 1deg
+        );
+      mix-blend-mode: screen;
+      animation: cameraNoise 0.8s steps(2) infinite;
+    }
+
+    @keyframes cameraNoise {
+      0% { transform: translate3d(0, 0, 0) scale(1.02); opacity: 0.25; }
+      50% { transform: translate3d(-4px, 2px, 0) scale(1.04); opacity: 0.55; }
+      100% { transform: translate3d(4px, -2px, 0) scale(1.02); opacity: 0.25; }
+    }
+
+    .camera-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, transparent 0, transparent 46%, rgba(0, 0, 0, 0.7) 80%);
+      pointer-events: none;
+    }
+
+    .camera-intensity-1 video {
+      filter: grayscale(0.8) contrast(1.5) saturate(0.6) hue-rotate(160deg) brightness(0.9);
+    }
+
+    .camera-intensity-2 video {
+      filter: grayscale(0.9) contrast(1.7) saturate(0.5) hue-rotate(165deg) brightness(0.85);
+      image-rendering: pixelated;
+    }
+
+    .camera-intensity-3 video {
+      filter: grayscale(1) contrast(2) saturate(0.35) hue-rotate(175deg) brightness(0.8);
+      image-rendering: pixelated;
+      transform: scale(1.12);
+    }
+
+    .camera-static.level-2 {
+      opacity: 0.45;
+    }
+
+    .camera-static.level-3 {
+      opacity: 0.8;
+    }
+
+    /* Phase 4 文本 */
+    .phase4-text {
+      text-align: center;
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(140, 170, 200, 0.35);
+      opacity: 0;
+      transition: opacity 0.8s ease;
+    }
+
+    .phase4-text span.status {
+      display: block;
+      margin-top: 6px;
+      font-size: 11px;
+    }
+
+    .phase4-restart {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase4-restart .prompt {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      color: rgba(190, 210, 235, 0.62);
+    }
+
+    /* 文案文字 */
+    .story-line {
+      font-family: var(--font-serif);
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .center-message {
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .center-message-small {
+      margin-top: 4px;
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .app.phase-2,
+    .app.phase-3,
+    .app.phase-3-camera,
+    .app.phase-4 {
+      color: var(--color-cool);
+    }
+
+    .app.phase-2 .text-console,
+    .app.phase-3 .text-console,
+    .app.phase-3-camera .text-console,
+    .app.phase-4 .text-console {
+      color: var(--color-cool);
+    }
+
+    .app.phase-2 .top-bar,
+    .app.phase-3 .top-bar,
+    .app.phase-3-camera .top-bar,
+    .app.phase-4 .top-bar {
+      color: var(--color-cool-dim);
+    }
+
+    .app.phase-2 .noise-overlay,
+    .app.phase-3 .noise-overlay,
+    .app.phase-3-camera .noise-overlay,
+    .app.phase-4 .noise-overlay {
+      opacity: 0.25;
+    }
+
+    .app.phase-2.glitch,
+    .app.phase-3.glitch,
+    .app.phase-3-camera.glitch {
+      animation: jitter 0.15s ease-in-out 0s 1;
+    }
+
+    @keyframes jitter {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(-1px); }
+      50% { transform: translateX(1px); }
+      75% { transform: translateX(-0.5px); }
+      100% { transform: translateX(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app phase-0" id="app">
+    <div class="hud-corner hud-tl"></div>
+    <div class="hud-corner hud-tr"></div>
+    <div class="hud-corner hud-bl"></div>
+    <div class="hud-corner hud-br"></div>
+
+    <div class="noise-overlay"></div>
+    <div class="scanlines"></div>
+    <div class="flash" id="flash"></div>
+
+    <div class="content">
+      <div class="top-bar">
+        <div class="phase-label" id="phaseLabel">P0</div>
+        <div class="timer" id="missionTimer">T+00:00</div>
+        <div class="signal">
+          <div class="signal-bars" id="signalBars">
+            <div class="signal-bar"></div>
+            <div class="signal-bar"></div>
+            <div class="signal-bar"></div>
+            <div class="signal-bar"></div>
+            <div class="signal-bar"></div>
+          </div>
+          <div class="signal-label" id="signalLabel">SIG 100%</div>
+        </div>
+      </div>
+
+      <div class="middle">
+        <div class="telemetry" id="telemetry">
+          <div class="telemetry-row">
+            <div class="telemetry-label">DST</div>
+            <div class="telemetry-value" id="dstValue">——</div>
+          </div>
+          <div class="telemetry-row">
+            <div class="telemetry-label">SIG</div>
+            <div class="telemetry-value" id="teleSigValue">█████ 100%</div>
+          </div>
+          <div class="telemetry-row">
+            <div class="telemetry-label">CAM</div>
+            <div class="telemetry-value" id="camValue">○ 离线</div>
+          </div>
+          <div class="telemetry-row">
+            <div class="telemetry-label">电池</div>
+            <div class="telemetry-value" id="thrValue">待命</div>
+          </div>
+          <div class="callsign" id="callsign">VGR-02 // ———</div>
+        </div>
+
+        <!-- Phase 0 文本控制台 / Phase 3 提示 / Phase 4 文本 -->
+        <div class="center-console" id="centerConsole">
+          <div class="text-console" id="textConsole">
+            <div id="textLines"></div>
+          </div>
+          <div class="countdown" id="countdown"></div>
+
+          <!-- Phase 3 相机视图 -->
+          <div class="camera-view" id="cameraView">
+            <div class="camera-inner camera-intensity-1" id="cameraInner">
+              <video id="cameraVideo" autoplay playsinline muted></video>
+              <canvas id="cameraRenderCanvas"></canvas>
+              <div class="camera-overlay">
+                <div class="camera-frame-corner tl"></div>
+                <div class="camera-frame-corner tr"></div>
+                <div class="camera-frame-corner bl"></div>
+                <div class="camera-frame-corner br"></div>
+                <div class="camera-crosshair"></div>
+                <div class="camera-static" id="cameraStatic"></div>
+                <div class="camera-vignette"></div>
+                <div class="camera-hud">
+                  <div class="camera-hud-top">
+                    <div>CAM-01 // REC</div>
+                    <div class="camera-rec">
+                      <div class="camera-rec-dot" id="cameraRecDot"></div>
+                      <div id="cameraRecLabel">REC</div>
+                    </div>
+                  </div>
+                  <div class="camera-hud-bottom">
+                    <div>DST: ∞</div>
+                    <div id="cameraVoyagerLabel">VGR-02</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Phase 4 文本 -->
+          <div class="phase4-text" id="phase4Text" style="display:none;">
+            <div id="phase4VoyagerLabel">VGR-02</div>
+            <span class="status">任务状态：进行中</span>
+            <div class="phase4-restart" id="phase4Restart" style="display:none;">
+              <div class="prompt">是否重新开始？</div>
+              <button class="button button-ghost" id="restartBtn">重新开始</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 摇杆区（Phase 1-2） -->
+        <div class="joystick-wrapper" id="joystickWrapper" style="display:none;">
+          <div class="joystick-hint" id="joystickHint">按住并滑动 · 控制推进方向</div>
+          <div class="joystick" id="joystick">
+            <div class="joystick-circle"></div>
+            <div class="joystick-circle"></div>
+            <div class="joystick-circle"></div>
+            <div class="joystick-cross"></div>
+            <div class="joystick-compass-mark n"></div>
+            <div class="joystick-compass-mark e"></div>
+            <div class="joystick-compass-mark s"></div>
+            <div class="joystick-compass-mark w"></div>
+            <div class="joystick-touch" id="joystickTouch"></div>
+            <div class="joystick-line" id="joystickLine"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom">
+        <div class="progress-track">
+          <div class="progress-bar" id="progressBar"></div>
+          <div class="progress-glitch" id="progressGlitch"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === 配置 ===
+    const WS_URL = "wss://websocket-m24h.onrender.com/:443";
+
+    const Phase = {
+      STARTUP: 0,
+      ORBIT: 1,
+      DRIFT: 2,
+      LOOK: 3,
+      LOOK_CAMERA: 31,
+      ENDING: 4,
+    };
+
+    const appEl = document.getElementById("app");
+    const phaseLabelEl = document.getElementById("phaseLabel");
+    const missionTimerEl = document.getElementById("missionTimer");
+    const signalBarsEl = document.getElementById("signalBars");
+    const signalLabelEl = document.getElementById("signalLabel");
+    const dstValueEl = document.getElementById("dstValue");
+    const teleSigValueEl = document.getElementById("teleSigValue");
+    const camValueEl = document.getElementById("camValue");
+    const thrValueEl = document.getElementById("thrValue");
+    const callsignEl = document.getElementById("callsign");
+    const textConsoleEl = document.getElementById("textConsole");
+    const textLinesEl = document.getElementById("textLines");
+    const countdownEl = document.getElementById("countdown");
+    const flashEl = document.getElementById("flash");
+    const joystickWrapperEl = document.getElementById("joystickWrapper");
+    const joystickEl = document.getElementById("joystick");
+    const joystickTouchEl = document.getElementById("joystickTouch");
+    const joystickLineEl = document.getElementById("joystickLine");
+    const progressBarEl = document.getElementById("progressBar");
+    const progressGlitchEl = document.getElementById("progressGlitch");
+    const centerConsoleEl = document.getElementById("centerConsole");
+    const cameraViewEl = document.getElementById("cameraView");
+    const cameraInnerEl = document.getElementById("cameraInner");
+    const cameraVideoEl = document.getElementById("cameraVideo");
+    const cameraRenderCanvasEl = document.getElementById("cameraRenderCanvas");
+    const cameraRenderCtx = cameraRenderCanvasEl.getContext("2d");
+    const cameraStaticEl = document.getElementById("cameraStatic");
+    const cameraRecDotEl = document.getElementById("cameraRecDot");
+    const cameraRecLabelEl = document.getElementById("cameraRecLabel");
+    const phase4TextEl = document.getElementById("phase4Text");
+    const cameraVoyagerLabelEl = document.getElementById("cameraVoyagerLabel");
+    const phase4VoyagerLabelEl = document.getElementById("phase4VoyagerLabel");
+    const phase4RestartEl = document.getElementById("phase4Restart");
+    const restartBtnEl = document.getElementById("restartBtn");
+
+    const state = {
+      id: "u" + Math.floor(Math.random() * 100000),
+      voyagerNum: 2,
+      name: "",
+      phase: Phase.STARTUP,
+      startTime: performance.now(),
+      phaseStartTime: performance.now(),
+      orbitDuration: 30_000,
+      driftDuration: 60_000,
+      cameraDuration: 8_000,
+      endExtraDuration: 10_000,
+      dstKm: 0,
+      sigLevel: 1.0,
+      displayedSigLevel: 1.0,
+      joyX: 0,
+      joyY: 0,
+      joyActive: false,
+      lastRawJoyX: 0,
+      lastRawJoyY: 0,
+      lastInputAt: 0,
+      instability: 0,
+      delayedInputHandles: [],
+      ws: null,
+      wsConnected: false,
+      missionTimerHandle: null,
+      orbitIntervalHandle: null,
+      driftGlitchHandle: null,
+      cameraTimeout: null,
+      cameraStream: null,
+      cameraLastDrawTs: 0,
+      cameraConnection: 1,
+      phaseTimeouts: [],
+      startupVoyagerLineEl: null,
+    };
+
+    const innerVoice = {
+      ctx: null,
+      master: null,
+      compressor: null,
+      humOsc: null,
+      humGain: null,
+      humLfo: null,
+      humLfoGain: null,
+      typeHumGain: null,
+      noiseSource: null,
+      noiseFilter: null,
+      noiseGain: null,
+      started: false,
+      heartbeatNextAt: 0,
+      heartbeatTimer: null,
+      updateHandle: null,
+      clickCooldownUntil: 0,
+      collapseTriggered: false,
+      collapsePeakUntil: 0,
+      silenceUntil: 0,
+    };
+
+    // === 工具函数 ===
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function clamp(v, min, max) {
+      return v < min ? min : v > max ? max : v;
+    }
+
+    function getSubjectiveConnection() {
+      if (state.phase === Phase.DRIFT) return clamp(state.sigLevel, 0, 1);
+      if (state.phase === Phase.LOOK_CAMERA) return clamp(state.cameraConnection, 0, 1);
+      if (state.phase === Phase.ENDING) return 0;
+      if (state.phase === Phase.ORBIT) return clamp(state.sigLevel, 0.75, 1);
+      return 1;
+    }
+
+    function createNoiseBuffer(audioCtx) {
+      const length = audioCtx.sampleRate * 2;
+      const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.6;
+      }
+      return buffer;
+    }
+
+    function ensureInnerVoiceStarted() {
+      if (innerVoice.started) {
+        if (innerVoice.ctx && innerVoice.ctx.state === "suspended") innerVoice.ctx.resume().catch(() => {});
+        return;
+      }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const audioCtx = new AC();
+
+      const master = audioCtx.createGain();
+      master.gain.value = 0.0001;
+      const compressor = audioCtx.createDynamicsCompressor();
+      compressor.threshold.value = -18;
+      compressor.knee.value = 14;
+      compressor.ratio.value = 3.5;
+      compressor.attack.value = 0.008;
+      compressor.release.value = 0.18;
+      master.connect(compressor);
+      compressor.connect(audioCtx.destination);
+
+      const humOsc = audioCtx.createOscillator();
+      humOsc.type = "triangle";
+      humOsc.frequency.value = 52;
+      const humGain = audioCtx.createGain();
+      humGain.gain.value = 0.0001;
+      humOsc.connect(humGain).connect(master);
+      const typeHumGain = audioCtx.createGain();
+      typeHumGain.gain.value = 0.0001;
+      humOsc.connect(typeHumGain).connect(master);
+
+      const humLfo = audioCtx.createOscillator();
+      humLfo.type = "sine";
+      humLfo.frequency.value = 0.11;
+      const humLfoGain = audioCtx.createGain();
+      humLfoGain.gain.value = 0;
+      humLfo.connect(humLfoGain).connect(humGain.gain);
+
+      const noiseSource = audioCtx.createBufferSource();
+      noiseSource.buffer = createNoiseBuffer(audioCtx);
+      noiseSource.loop = true;
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = "highpass";
+      noiseFilter.frequency.value = 2400;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.value = 0.0001;
+      noiseSource.connect(noiseFilter).connect(noiseGain).connect(master);
+
+      humOsc.start();
+      humLfo.start();
+      noiseSource.start();
+      audioCtx.resume().catch(() => {});
+
+      innerVoice.ctx = audioCtx;
+      innerVoice.master = master;
+      innerVoice.compressor = compressor;
+      innerVoice.humOsc = humOsc;
+      innerVoice.humGain = humGain;
+      innerVoice.humLfo = humLfo;
+      innerVoice.humLfoGain = humLfoGain;
+      innerVoice.typeHumGain = typeHumGain;
+      innerVoice.noiseSource = noiseSource;
+      innerVoice.noiseFilter = noiseFilter;
+      innerVoice.noiseGain = noiseGain;
+      innerVoice.started = true;
+      innerVoice.heartbeatNextAt = performance.now();
+      if (!innerVoice.updateHandle) innerVoice.updateHandle = requestAnimationFrame(updateInnerVoice);
+    }
+
+    function playHeartbeat(connection, isPeak = false) {
+      if (!innerVoice.started || !innerVoice.ctx) return;
+      const audioCtx = innerVoice.ctx;
+      const now = audioCtx.currentTime;
+      const anxiety = clamp(1 - connection, 0, 1);
+      const base = isPeak ? 0.11 : 0.06;
+      const amp = base + anxiety * (isPeak ? 0.12 : 0.09);
+      const lowF = 46 + anxiety * 28;
+      const highF = lowF * 1.8;
+
+      function thump(time, gainMul, freq) {
+        const osc = audioCtx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, time);
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.setValueAtTime(120 + anxiety * 160, time);
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, time);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.0002, amp * gainMul), time + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, time + (isPeak ? 0.14 : 0.11));
+        osc.connect(lp).connect(g).connect(innerVoice.master);
+        osc.start(time);
+        osc.stop(time + (isPeak ? 0.22 : 0.18));
+      }
+
+      thump(now, 1, lowF);
+      thump(now + 0.08 + anxiety * 0.03, 0.52, highF);
+    }
+
+    function playSignalTick(connection = 1) {
+      if (!innerVoice.started || !innerVoice.ctx || !innerVoice.master) return;
+      const audioCtx = innerVoice.ctx;
+      const now = audioCtx.currentTime;
+      const conn = clamp(connection, 0, 1);
+      if (conn < 0.35 && Math.random() < (0.35 - conn) * 1.1) return;
+      const osc = audioCtx.createOscillator();
+      osc.type = Math.random() < 0.75 ? "sine" : "triangle";
+      const freq = 800 + Math.random() * 1200;
+      osc.frequency.setValueAtTime(freq, now);
+      const hp = audioCtx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.setValueAtTime(700, now);
+      const g = audioCtx.createGain();
+      const amp = 0.0025 + conn * 0.0045;
+      const dur = 0.01 + Math.random() * 0.03;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(amp, now + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(hp).connect(g).connect(innerVoice.master);
+      osc.start(now);
+      osc.stop(now + dur + 0.01);
+    }
+
+    function setTypeSignalBed(active, connection = 1) {
+      if (!innerVoice.started || !innerVoice.ctx || !innerVoice.typeHumGain) return;
+      const audioCtx = innerVoice.ctx;
+      const conn = clamp(connection, 0, 1);
+      const target = active ? (0.0028 + conn * 0.0032) : 0.0001;
+      innerVoice.typeHumGain.gain.linearRampToValueAtTime(target, audioCtx.currentTime + 0.06);
+    }
+
+    function triggerOperationFriction(intensity = 0.2) {
+      if (!innerVoice.started || !innerVoice.ctx || !innerVoice.master) return;
+      const nowPerf = performance.now();
+      if (nowPerf < innerVoice.clickCooldownUntil) return;
+      innerVoice.clickCooldownUntil = nowPerf + 90;
+      const audioCtx = innerVoice.ctx;
+      const now = audioCtx.currentTime;
+      const src = audioCtx.createBufferSource();
+      src.buffer = createNoiseBuffer(audioCtx);
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 1200 + Math.random() * 1200;
+      bp.Q.value = 6;
+      const g = audioCtx.createGain();
+      const vol = 0.002 + intensity * 0.004;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(vol, now + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+      src.connect(bp).connect(g).connect(innerVoice.master);
+      src.start(now);
+      src.stop(now + 0.06);
+    }
+
+    function updateInnerVoice() {
+      if (!innerVoice.started || !innerVoice.ctx) return;
+      const audioCtx = innerVoice.ctx;
+      const nowPerf = performance.now();
+      const connection = getSubjectiveConnection();
+      const anxiety = clamp(1 - connection, 0, 1);
+      const inSilence = nowPerf < innerVoice.silenceUntil;
+
+      if (!innerVoice.collapseTriggered && connection <= 0.06 && state.phase >= Phase.LOOK_CAMERA) {
+        innerVoice.collapseTriggered = true;
+        innerVoice.collapsePeakUntil = nowPerf + 300;
+        innerVoice.silenceUntil = nowPerf + 720;
+      }
+
+      const peakMode = innerVoice.collapseTriggered && nowPerf < innerVoice.collapsePeakUntil;
+      if (!inSilence) {
+        if (nowPerf >= innerVoice.heartbeatNextAt) {
+          const hr = peakMode ? 164 : (66 + anxiety * 70);
+          const interval = 60000 / hr;
+          const jitter = anxiety > 0.55 ? (Math.random() * 2 - 1) * (26 + anxiety * 80) : 0;
+          playHeartbeat(connection, peakMode);
+          innerVoice.heartbeatNextAt = nowPerf + Math.max(220, interval + jitter);
+        }
+      }
+
+      const humTarget = inSilence ? 0.0001 : (0.018 + anxiety * 0.09);
+      const trembleTarget = inSilence ? 0 : anxiety * 0.006;
+      const noiseTarget = inSilence ? 0.0001 : Math.pow(anxiety, 1.7) * 0.035;
+      const masterTarget = inSilence ? 0.0001 : (0.28 + anxiety * 0.48);
+
+      innerVoice.humGain.gain.linearRampToValueAtTime(humTarget, audioCtx.currentTime + 0.08);
+      innerVoice.humLfoGain.gain.linearRampToValueAtTime(trembleTarget, audioCtx.currentTime + 0.08);
+      innerVoice.noiseGain.gain.linearRampToValueAtTime(noiseTarget, audioCtx.currentTime + 0.08);
+      innerVoice.noiseFilter.frequency.linearRampToValueAtTime(lerp(2800, 4800, anxiety), audioCtx.currentTime + 0.08);
+      innerVoice.master.gain.linearRampToValueAtTime(masterTarget, audioCtx.currentTime + 0.08);
+      innerVoice.compressor.threshold.linearRampToValueAtTime(lerp(-18, -30, anxiety), audioCtx.currentTime + 0.08);
+      innerVoice.compressor.ratio.linearRampToValueAtTime(lerp(3.5, 9, anxiety), audioCtx.currentTime + 0.08);
+
+      innerVoice.updateHandle = requestAnimationFrame(updateInnerVoice);
+    }
+
+    function formatTime(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      const ss = s % 60;
+      return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+    }
+
+    function formatVoyagerNum(num) {
+      return String(num).padStart(2, "0");
+    }
+
+    function getVoyagerLabel() {
+      return `VGR-${formatVoyagerNum(state.voyagerNum)}`;
+    }
+
+    function assignVoyagerNum() {
+      const key = "departure-voyager-seq";
+      const current = parseInt(localStorage.getItem(key) || "1", 10);
+      const next = Number.isFinite(current) ? current + 1 : 2;
+      state.voyagerNum = next;
+      localStorage.setItem(key, String(next));
+      updateVoyagerUI();
+    }
+
+    function updateVoyagerUI() {
+      const label = getVoyagerLabel();
+      callsignEl.textContent = `${label} // ${state.name || "———"}`;
+      cameraVoyagerLabelEl.textContent = label;
+      phase4VoyagerLabelEl.textContent = label;
+      if (state.startupVoyagerLineEl) {
+        state.startupVoyagerLineEl.textContent = `> ${label} 已上线`;
+      }
+    }
+
+    function registerTimeout(callback, delay) {
+      const handle = setTimeout(() => {
+        state.phaseTimeouts = state.phaseTimeouts.filter((item) => item !== handle);
+        callback();
+      }, delay);
+      state.phaseTimeouts.push(handle);
+      return handle;
+    }
+
+    function clearPhaseTimeouts() {
+      state.phaseTimeouts.forEach((handle) => clearTimeout(handle));
+      state.phaseTimeouts = [];
+    }
+
+    function clearPhaseRuntime() {
+      clearBatteryTick();
+      clearPhaseTimeouts();
+      clearDelayedInputs();
+      if (state.missionTimerHandle) {
+        cancelAnimationFrame(state.missionTimerHandle);
+        state.missionTimerHandle = null;
+      }
+      if (state.orbitIntervalHandle) {
+        clearInterval(state.orbitIntervalHandle);
+        state.orbitIntervalHandle = null;
+      }
+      if (state.driftGlitchHandle) {
+        clearInterval(state.driftGlitchHandle);
+        state.driftGlitchHandle = null;
+      }
+      if (state.cameraTimeout) {
+        clearTimeout(state.cameraTimeout);
+        state.cameraTimeout = null;
+      }
+      if (state.cameraStream) {
+        state.cameraStream.getTracks().forEach((t) => t.stop());
+        state.cameraStream = null;
+      }
+      cameraVideoEl.srcObject = null;
+      cameraRenderCanvasEl.style.display = "none";
+      cameraRenderCanvasEl.style.filter = "";
+      cameraRenderCanvasEl.style.transform = "";
+      state.cameraLastDrawTs = 0;
+      state.cameraConnection = 1;
+      innerVoice.collapseTriggered = false;
+      innerVoice.collapsePeakUntil = 0;
+      innerVoice.silenceUntil = 0;
+    }
+
+    function restartExperience() {
+      clearPhaseRuntime();
+      state.name = "";
+      state.phase = Phase.STARTUP;
+      state.startTime = performance.now();
+      state.phaseStartTime = state.startTime;
+      state.dstKm = 0;
+      state.sigLevel = 1.0;
+      state.displayedSigLevel = 1.0;
+      state.joyX = 0;
+      state.joyY = 0;
+      state.joyActive = false;
+      state.lastRawJoyX = 0;
+      state.lastRawJoyY = 0;
+      state.lastInputAt = 0;
+      state.instability = 0;
+      innerVoice.collapseTriggered = false;
+      innerVoice.collapsePeakUntil = 0;
+      innerVoice.silenceUntil = 0;
+      joystickEl.classList.remove("joystick-active", "joystick-delayed");
+      joystickTouchEl.style.opacity = "0";
+      joystickLineEl.style.opacity = "0";
+      joystickLineEl.style.width = "0";
+      callsignEl.classList.remove("telemetry-muted");
+      dstValueEl.classList.remove("telemetry-muted");
+      teleSigValueEl.classList.remove("telemetry-muted");
+      camValueEl.classList.remove("telemetry-muted");
+      thrValueEl.classList.remove("telemetry-muted", "telemetry-error");
+      phase4RestartEl.style.display = "none";
+      phase4TextEl.style.opacity = "0";
+      phase4TextEl.style.display = "none";
+      textConsoleEl.style.opacity = "1";
+      textConsoleEl.style.filter = "";
+      centerConsoleEl.style.filter = "";
+      countdownEl.classList.remove("visible");
+      countdownEl.textContent = "";
+      flashEl.classList.remove("active");
+      state.startupVoyagerLineEl = null;
+      assignVoyagerNum();
+      updateDisplayedSignal(true);
+      startPhase0();
+    }
+
+    function setPhaseClass(phase) {
+      appEl.className = "app";
+      if (phase === Phase.STARTUP) {
+        appEl.classList.add("phase-0");
+      } else if (phase === Phase.ORBIT) {
+        appEl.classList.add("phase-1");
+      } else if (phase === Phase.DRIFT) {
+        appEl.classList.add("phase-2");
+      } else if (phase === Phase.LOOK) {
+        appEl.classList.add("phase-3");
+      } else if (phase === Phase.LOOK_CAMERA) {
+        appEl.classList.add("phase-3-camera");
+      } else if (phase === Phase.ENDING) {
+        appEl.classList.add("phase-4");
+      }
+    }
+
+    function updateSignalBars(level) {
+      level = clamp(level, 0, 1);
+      const bars = signalBarsEl.querySelectorAll(".signal-bar");
+      const activeBars = Math.round(level * bars.length);
+      bars.forEach((bar, i) => {
+        const isActive = i < activeBars;
+        bar.classList.toggle("active", isActive);
+        bar.style.height = `${3 + i * 2 + (isActive ? 2 : 0)}px`;
+      });
+      const pct = Math.round(level * 100);
+      signalLabelEl.textContent = `SIG ${pct}%`;
+      let sigBlocks = Math.round(level * 5);
+      if (sigBlocks < 0) sigBlocks = 0;
+      if (sigBlocks > 5) sigBlocks = 5;
+      const solid = "█".repeat(sigBlocks);
+      const empty = "░".repeat(5 - sigBlocks);
+      teleSigValueEl.textContent = `${solid}${empty} ${pct}%`;
+    }
+
+    function updateDisplayedSignal(force = false) {
+      const actual = clamp(state.sigLevel, 0, 1);
+      if (force) {
+        state.displayedSigLevel = actual;
+      } else {
+        let lag = 0.24;
+        if (state.phase === Phase.DRIFT) {
+          const t = clamp((performance.now() - state.phaseStartTime) / state.driftDuration, 0, 1);
+          lag = lerp(0.12, 0.92, t);
+        } else if (state.phase >= Phase.LOOK) {
+          lag = 0.96;
+        }
+        state.displayedSigLevel = lerp(state.displayedSigLevel, actual, 1 - lag);
+      }
+      updateSignalBars(state.displayedSigLevel);
+    }
+
+    function clearDelayedInputs() {
+      state.delayedInputHandles.forEach((handle) => clearTimeout(handle));
+      state.delayedInputHandles = [];
+    }
+
+    function getControlProfile() {
+      const now = performance.now();
+      const idleMs = now - state.lastInputAt;
+      const idleRecover = clamp((idleMs - 500) / 1200, 0, 1);
+      const instability = clamp(state.instability * (1 - idleRecover * 0.7), 0, 1);
+
+      if (state.phase === Phase.ORBIT) {
+        const t = clamp((now - state.phaseStartTime) / state.orbitDuration, 0, 1);
+        return {
+          delayMs: lerp(0, 100, t) + instability * 90,
+          drift: instability * 0.04 + t * 0.015,
+          decay: instability * 0.04,
+          feedbackLag: 0.06 + instability * 0.12,
+          instability,
+        };
+      }
+
+      if (state.phase === Phase.DRIFT) {
+        const t = clamp((now - state.phaseStartTime) / state.driftDuration, 0, 1);
+        const mercyWindow = t > 0.86 && t < 0.93;
+        if (mercyWindow) {
+          return {
+            delayMs: lerp(40, 90, (t - 0.86) / 0.07),
+            drift: 0.03,
+            decay: 0.04,
+            feedbackLag: 0.08,
+            instability: instability * 0.35,
+          };
+        }
+        const collapse = clamp((t - 0.93) / 0.07, 0, 1);
+        return {
+          delayMs: lerp(140, 820, t) + instability * 260 + collapse * 300,
+          drift: lerp(0.05, 0.24, t) + instability * 0.14 + collapse * 0.22,
+          decay: lerp(0.05, 0.82, t) + instability * 0.1 + collapse * 0.18,
+          feedbackLag: lerp(0.1, 0.5, t) + collapse * 0.2,
+          instability,
+        };
+      }
+
+      if (state.phase === Phase.LOOK || state.phase === Phase.LOOK_CAMERA || state.phase === Phase.ENDING) {
+        return {
+          delayMs: 1000,
+          drift: 0.35,
+          decay: 0.98,
+          feedbackLag: 0.55,
+          instability,
+        };
+      }
+
+      return {
+        delayMs: 0,
+        drift: 0,
+        decay: 0,
+        feedbackLag: 0.04,
+        instability,
+      };
+    }
+
+    function updateDstDisplay() {
+      const km = Math.round(state.dstKm);
+      const str = km.toLocaleString("en-US");
+      dstValueEl.textContent = `${str} km`;
+    }
+
+    let batteryTickHandle = null;
+
+    function clearBatteryTick() {
+      if (batteryTickHandle) {
+        clearInterval(batteryTickHandle);
+        batteryTickHandle = null;
+      }
+    }
+
+    function startBatteryTick() {
+      clearBatteryTick();
+      batteryTickHandle = setInterval(() => {
+        if (state.phase !== Phase.ORBIT && state.phase !== Phase.DRIFT) {
+          clearBatteryTick();
+          return;
+        }
+        updateThrBatteryDisplay();
+      }, 120);
+    }
+
+    function updateThrBatteryDisplay() {
+      if (state.phase === Phase.ORBIT) {
+        const t = clamp((performance.now() - state.phaseStartTime) / state.orbitDuration, 0, 1);
+        const pct = Math.round(lerp(100, 50, t));
+        thrValueEl.textContent = `${pct}%`;
+      } else if (state.phase === Phase.DRIFT) {
+        const t = clamp((performance.now() - state.phaseStartTime) / state.driftDuration, 0, 1);
+        const pct = Math.round(lerp(50, 0, t));
+        thrValueEl.textContent = `${pct}%`;
+      }
+    }
+
+    function setTelemetryForPhase() {
+      if (state.phase === Phase.STARTUP) {
+        dstValueEl.textContent = "——";
+        state.displayedSigLevel = 1;
+        updateDisplayedSignal(true);
+        camValueEl.textContent = "○ 离线";
+        thrValueEl.textContent = "待命";
+        updateVoyagerUI();
+        clearBatteryTick();
+      } else if (state.phase === Phase.ORBIT) {
+        camValueEl.textContent = "● 在线";
+        thrValueEl.classList.remove("telemetry-error");
+        updateThrBatteryDisplay();
+        startBatteryTick();
+      } else if (state.phase === Phase.DRIFT) {
+        thrValueEl.classList.add("telemetry-error");
+        camValueEl.textContent = "● 在线";
+        updateThrBatteryDisplay();
+        startBatteryTick();
+      } else if (state.phase === Phase.LOOK || state.phase === Phase.LOOK_CAMERA || state.phase === Phase.ENDING) {
+        clearBatteryTick();
+        thrValueEl.textContent = "0%";
+        thrValueEl.classList.remove("telemetry-error");
+        camValueEl.textContent = state.phase === Phase.LOOK_CAMERA ? "● 使用中" : "○ 已关闭";
+      }
+    }
+
+    // 文本打字机
+    function appendLine(text, isStory) {
+      const lineEl = document.createElement("div");
+      lineEl.className = isStory ? "text-line story-line" : "text-line";
+      textLinesEl.appendChild(lineEl);
+      textConsoleEl.scrollTop = textConsoleEl.scrollHeight;
+      return lineEl;
+    }
+
+    function typeText(lineEl, text, speed = 40) {
+      return new Promise((resolve) => {
+        ensureInnerVoiceStarted();
+        let i = 0;
+        let ended = false;
+        const typingConn = getSubjectiveConnection();
+        setTypeSignalBed(true, typingConn);
+        const cursorSpan = document.createElement("span");
+        cursorSpan.className = "cursor";
+        lineEl.textContent = "";
+        lineEl.appendChild(cursorSpan);
+
+        function done() {
+          if (ended) return;
+          ended = true;
+          setTypeSignalBed(false, typingConn);
+          cursorSpan.remove();
+          lineEl.textContent = text;
+          resolve();
+        }
+
+        function step() {
+          if (i < text.length) {
+            const ch = text[i];
+            lineEl.insertBefore(document.createTextNode(ch), cursorSpan);
+            if (ch.trim()) playSignalTick(typingConn);
+            i++;
+            textConsoleEl.scrollTop = textConsoleEl.scrollHeight;
+            const jitter = 1 + (Math.random() * 0.4 - 0.2);
+            const delay = Math.max(12, speed * jitter);
+            setTimeout(step, delay);
+          } else {
+            done();
+          }
+        }
+        step();
+      });
+    }
+
+    function vibrate(pattern) {
+      if (navigator.vibrate) {
+        try {
+          navigator.vibrate(pattern);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    // 进度条控制
+    function setProgress(durationMs) {
+      progressBarEl.style.transitionDuration = `${durationMs}ms`;
+      progressBarEl.style.width = "0%";
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          progressBarEl.style.width = "100%";
+        });
+      });
+    }
+
+    function resetProgress() {
+      progressBarEl.style.transitionDuration = "0ms";
+      progressBarEl.style.width = "0%";
+    }
+
+    function triggerProgressGlitch() {
+      progressGlitchEl.classList.remove("active");
+      void progressGlitchEl.offsetWidth;
+      progressGlitchEl.classList.add("active");
+    }
+
+    // WebSocket（可选）
+    function initWebSocket() {
+      if (!WS_URL || state.ws) return;
+      try {
+        const ws = new WebSocket(WS_URL);
+        state.ws = ws;
+        ws.addEventListener("open", () => {
+          state.wsConnected = true;
+          console.log("Socket connection open!");
+          ws.send("pong");
+        });
+        ws.addEventListener("close", () => {
+          state.wsConnected = false;
+          console.log("Socket connection closed");
+          alert("closing socket server");
+        });
+        ws.addEventListener("error", (error) => {
+          state.wsConnected = false;
+          console.error("Error in the connection", error);
+          alert("error connecting socket server");
+        });
+      } catch (e) {
+        console.warn("WS error", e);
+      }
+    }
+
+    function sendWS(data) {
+      const payload = JSON.stringify(data);
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(payload);
+      } else {
+        // 调试：在控制台看到
+        console.log("send", payload);
+      }
+    }
+
+    // === Phase 流程 ===
+    async function startPhase0() {
+      clearPhaseRuntime();
+      state.phase = Phase.STARTUP;
+      state.phaseStartTime = performance.now();
+      setPhaseClass(state.phase);
+      phaseLabelEl.textContent = "P0";
+      resetProgress();
+      setTelemetryForPhase();
+      textLinesEl.innerHTML = "";
+      cameraViewEl.style.display = "none";
+      phase4TextEl.style.display = "none";
+      phase4TextEl.style.opacity = "0";
+      phase4RestartEl.style.display = "none";
+      joystickWrapperEl.style.display = "none";
+      countdownEl.textContent = "";
+      countdownEl.classList.remove("visible");
+
+      await new Promise((r) => setTimeout(r, 2000));
+
+      const l1 = appendLine("> VOYAGER PROGRAM");
+      await typeText(l1, "> VOYAGER PROGRAM");
+      await new Promise((r) => setTimeout(r, 250));
+
+      const l2 = appendLine("> DEEP SPACE NETWORK");
+      await typeText(l2, "> DEEP SPACE NETWORK");
+      await new Promise((r) => setTimeout(r, 400));
+
+      const l3 = appendLine("> 正在连接...");
+      await typeText(l3, "> 正在连接...");
+      await new Promise((r) => setTimeout(r, 600));
+
+      const l4 = appendLine("> 正在分配探测器编号...");
+      await typeText(l4, "> 正在分配探测器编号...");
+      await new Promise((r) => setTimeout(r, 900));
+
+      const namePromptLine = appendLine("> 为你的探测器命名：");
+      await typeText(namePromptLine, "> 为你的探测器命名：");
+
+      const inputRow = document.createElement("div");
+      inputRow.className = "input-row";
+      const inputLabel = document.createElement("div");
+      inputLabel.className = "input-label";
+      inputLabel.textContent = "NAME";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 12;
+      input.placeholder = "例如：远行";
+      input.className = "name-input";
+      const confirmBtn = document.createElement("button");
+      confirmBtn.className = "button button-ghost";
+      confirmBtn.textContent = "确认";
+      inputRow.appendChild(inputLabel);
+      inputRow.appendChild(input);
+      inputRow.appendChild(confirmBtn);
+      textLinesEl.appendChild(inputRow);
+      textConsoleEl.scrollTop = textConsoleEl.scrollHeight;
+
+      const numberLine = appendLine("> 等待编号分配...");
+      state.startupVoyagerLineEl = numberLine;
+
+      function finishName() {
+        ensureInnerVoiceStarted();
+        const value = input.value.trim();
+        if (!value) {
+          input.focus();
+          input.placeholder = "请输入名称";
+          input.style.borderBottomColor = "rgba(255, 90, 90, 0.9)";
+          return;
+        }
+        state.name = value;
+        updateVoyagerUI();
+        input.disabled = true;
+        input.style.opacity = "0.6";
+        inputRow.style.opacity = "0.6";
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = "0.6";
+        sendWS({
+          id: state.id,
+          type: "join",
+          name: value,
+          voyagerNum: state.voyagerNum,
+        });
+        registerTimeout(() => startCountdown(), 400);
+      }
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (!input.disabled) finishName();
+        }
+      });
+
+      input.addEventListener("input", () => {
+        input.style.borderBottomColor = "";
+      });
+
+      confirmBtn.addEventListener("click", finishName);
+
+      input.focus();
+    }
+
+    async function startCountdown() {
+      const lineMission = appendLine(`> ${getVoyagerLabel()} // ${state.name}`);
+      await typeText(lineMission, `> ${getVoyagerLabel()} // ${state.name}`);
+      const lineGoal = appendLine("> Task Objectives：HOLD THE CONNECTION\n> 任务目标：维持连接");
+      await typeText(lineGoal, "> Task Objectives：HOLD THE CONNECTION\n> 任务目标：维持连接");
+
+      countdownEl.classList.add("visible");
+      const seq = ["3", "2", "1"];
+      for (let i = 0; i < seq.length; i++) {
+        countdownEl.textContent = seq[i];
+        vibrate(40);
+        await new Promise((r) => setTimeout(r, 900));
+      }
+      countdownEl.classList.remove("visible");
+      flashEl.classList.add("active");
+      setTimeout(() => flashEl.classList.remove("active"), 450);
+
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true })
+          .then((stream) => {
+            stream.getTracks().forEach((t) => t.stop());
+          })
+          .catch(() => {});
+      }
+
+      startMissionTimer();
+      startPhase1();
+    }
+
+    function startMissionTimer() {
+      const start = state.startTime;
+      if (state.missionTimerHandle) cancelAnimationFrame(state.missionTimerHandle);
+      function tick() {
+        const now = performance.now();
+        missionTimerEl.textContent = "T+" + formatTime(now - start);
+        state.missionTimerHandle = requestAnimationFrame(tick);
+      }
+      tick();
+    }
+
+    function startPhase1() {
+      state.phase = Phase.ORBIT;
+      state.phaseStartTime = performance.now();
+      setPhaseClass(state.phase);
+      phaseLabelEl.textContent = "P1";
+      joystickWrapperEl.style.display = "flex";
+      textConsoleEl.style.opacity = "0.95";
+      textConsoleEl.style.filter = "none";
+      resetProgress();
+      setProgress(state.orbitDuration);
+      thrValueEl.classList.remove("telemetry-error");
+      setTelemetryForPhase();
+      state.dstKm = 12400;
+      updateDstDisplay();
+      state.sigLevel = 0.98;
+      state.displayedSigLevel = state.sigLevel;
+      updateDisplayedSignal(true);
+
+      const orbitStart = performance.now();
+      state.orbitIntervalHandle = setInterval(() => {
+        if (state.phase !== Phase.ORBIT) {
+          clearInterval(state.orbitIntervalHandle);
+          state.orbitIntervalHandle = null;
+          return;
+        }
+        const t = (performance.now() - orbitStart) / state.orbitDuration;
+        state.dstKm = 12400 + t * 30_000;
+        updateDstDisplay();
+        if (Math.random() < 0.15) {
+          appEl.classList.add("glitch");
+          setTimeout(() => appEl.classList.remove("glitch"), 120);
+        }
+      }, 1000);
+
+      registerTimeout(() => {
+        if (state.phase === Phase.ORBIT) {
+          startPhase2();
+        }
+      }, state.orbitDuration);
+    }
+
+    function startPhase2() {
+      state.phase = Phase.DRIFT;
+      state.phaseStartTime = performance.now();
+      setPhaseClass(state.phase);
+      phaseLabelEl.textContent = "P2";
+      setTelemetryForPhase();
+      resetProgress();
+      setProgress(state.driftDuration);
+
+      const start = performance.now();
+      if (state.driftGlitchHandle) clearInterval(state.driftGlitchHandle);
+      state.driftGlitchHandle = setInterval(() => {
+        if (state.phase !== Phase.DRIFT) {
+          clearInterval(state.driftGlitchHandle);
+          return;
+        }
+        const t = clamp((performance.now() - start) / state.driftDuration, 0, 1);
+        state.sigLevel = lerp(0.98, 0.03, t);
+        updateDisplayedSignal();
+        state.dstKm += 15_000 * (0.4 + 0.6 * t);
+        updateDstDisplay();
+
+        if (Math.random() < 0.28) {
+          appEl.classList.add("glitch");
+          setTimeout(() => appEl.classList.remove("glitch"), 100);
+        }
+
+        if (Math.random() < 0.2) {
+          triggerProgressGlitch();
+        }
+
+        if (Math.random() < 0.1) {
+          const glitchRow = appendLine("▓▓▓  ░░░█▓▓░░");
+          setTimeout(() => {
+            if (glitchRow.parentNode) glitchRow.remove();
+          }, 800);
+        }
+      }, 900);
+
+      registerTimeout(() => {
+        if (state.phase === Phase.DRIFT) {
+          startPhase3Prompt();
+        }
+      }, state.driftDuration);
+    }
+
+    async function startPhase3Prompt() {
+      clearBatteryTick();
+      state.phase = Phase.LOOK;
+      state.phaseStartTime = performance.now();
+      setPhaseClass(state.phase);
+      phaseLabelEl.textContent = "P3";
+      joystickWrapperEl.style.display = "none";
+      resetProgress();
+      setTelemetryForPhase();
+
+      const noiseBackup = textLinesEl.innerHTML;
+      textLinesEl.innerHTML = "";
+      const noiseLine = appendLine("▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒");
+      noiseLine.style.opacity = "0.6";
+      centerConsoleEl.style.filter = "none";
+      appEl.classList.add("glitch");
+      setTimeout(() => appEl.classList.remove("glitch"), 200);
+      await new Promise((r) => setTimeout(r, 1200));
+
+      textLinesEl.innerHTML = "";
+      const l1 = appendLine("> 相机系统尚可用");
+      await typeText(l1, "> 相机系统尚可用", 60);
+      await new Promise((r) => setTimeout(r, 1400));
+      const l2 = appendLine("> 是否回头");
+      await typeText(l2, "> 是否回头", 60);
+      await new Promise((r) => setTimeout(r, 900));
+
+      const msg = document.createElement("div");
+      msg.className = "center-message-small";
+      msg.textContent = "（没有其他选项）";
+      textLinesEl.appendChild(msg);
+
+      const row = document.createElement("div");
+      row.style.marginTop = "16px";
+      row.style.display = "flex";
+      row.style.justifyContent = "center";
+      const btn = document.createElement("button");
+      btn.className = "button button-ghost";
+      btn.textContent = "看";
+      row.appendChild(btn);
+      textLinesEl.appendChild(row);
+      textConsoleEl.scrollTop = textConsoleEl.scrollHeight;
+
+      btn.addEventListener("click", () => {
+        if (state.phase === Phase.LOOK) {
+          startPhase3Camera();
+        }
+      }, { once: true });
+
+      sendWS({
+        id: state.id,
+        type: "look",
+        phase: 3,
+      });
+    }
+
+    async function startPhase3Camera() {
+      state.phase = Phase.LOOK_CAMERA;
+      state.phaseStartTime = performance.now();
+      setPhaseClass(state.phase);
+      resetProgress();
+      setProgress(state.cameraDuration + 500);
+      textLinesEl.innerHTML = "";
+      cameraViewEl.style.display = "flex";
+      setTelemetryForPhase();
+
+      let level = 1;
+      cameraInnerEl.classList.remove("camera-intensity-2", "camera-intensity-3");
+      cameraStaticEl.classList.remove("level-2", "level-3");
+      cameraRecDotEl.style.opacity = "1";
+      cameraRecLabelEl.textContent = "REC";
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+          },
+          audio: false,
+        });
+        state.cameraStream = stream;
+        cameraVideoEl.srcObject = stream;
+      } catch (e) {
+        console.warn("camera error", e);
+      }
+
+      const startTs = performance.now();
+      cameraRenderCanvasEl.style.display = "block";
+      state.cameraLastDrawTs = 0;
+      state.cameraConnection = 1;
+
+      function updateCameraIntensity(conn) {
+        const t = (performance.now() - startTs) / state.cameraDuration;
+        if (t < 0.4) {
+          level = 1;
+        } else if (t < 0.7) {
+          level = 2;
+        } else {
+          level = 3;
+        }
+        cameraInnerEl.classList.remove("camera-intensity-1", "camera-intensity-2", "camera-intensity-3");
+        cameraInnerEl.classList.add(`camera-intensity-${level}`);
+        cameraStaticEl.classList.remove("level-1", "level-2", "level-3");
+        cameraStaticEl.classList.add(`level-${level}`);
+        const noiseLevel = 1 - conn;
+        cameraStaticEl.style.opacity = String(0.2 + noiseLevel * 0.6);
+      }
+
+      function ensureCameraCanvasSize() {
+        const vw = cameraVideoEl.videoWidth || 720;
+        const vh = cameraVideoEl.videoHeight || 1280;
+        if (cameraRenderCanvasEl.width !== vw || cameraRenderCanvasEl.height !== vh) {
+          cameraRenderCanvasEl.width = vw;
+          cameraRenderCanvasEl.height = vh;
+        }
+      }
+
+      function renderCameraFrame(conn, nowTs) {
+        if (!cameraRenderCtx || !cameraVideoEl.videoWidth || !cameraVideoEl.videoHeight) return;
+        ensureCameraCanvasSize();
+        const w = cameraRenderCanvasEl.width;
+        const h = cameraRenderCanvasEl.height;
+
+        // 帧卡顿与跳帧：connection 越低，越倾向于保留上一帧
+        let shouldDraw = true;
+        const targetFps = conn > 0.6 ? 30 : lerp(24, 3, clamp((0.6 - conn) / 0.6, 0, 1));
+        const minInterval = 1000 / targetFps;
+        if (nowTs - state.cameraLastDrawTs < minInterval) shouldDraw = false;
+        if (conn < 0.5 && Math.random() < lerp(0.08, 0.45, clamp((0.5 - conn) / 0.5, 0, 1))) shouldDraw = false;
+        if (conn < 0.3 && Math.random() < 0.12) shouldDraw = false;
+        if (conn < 0.1 && Math.random() < 0.7) shouldDraw = false;
+        if (!shouldDraw) return;
+
+        state.cameraLastDrawTs = nowTs;
+        cameraRenderCtx.save();
+        cameraRenderCtx.globalCompositeOperation = "source-over";
+        cameraRenderCtx.globalAlpha = 1;
+        cameraRenderCtx.drawImage(cameraVideoEl, 0, 0, w, h);
+
+        // RGB 错位重影
+        if (conn < 0.4) {
+          const offset = (1 - conn) * 10;
+          cameraRenderCtx.globalCompositeOperation = "lighter";
+          cameraRenderCtx.globalAlpha = 0.16 + (1 - conn) * 0.24;
+          cameraRenderCtx.drawImage(cameraVideoEl, offset, 0, w, h);
+          cameraRenderCtx.drawImage(cameraVideoEl, -offset, 0, w, h);
+          cameraRenderCtx.globalCompositeOperation = "source-over";
+          cameraRenderCtx.globalAlpha = 1;
+        }
+
+        // 局部遮挡（信号丢包）
+        if (conn < 0.3 && Math.random() < 0.1) {
+          const rw = lerp(w * 0.08, w * 0.34, 1 - conn);
+          const rh = lerp(h * 0.04, h * 0.16, 1 - conn);
+          const rx = Math.random() * (w - rw);
+          const ry = Math.random() * (h - rh);
+          cameraRenderCtx.fillStyle = "rgba(0,0,0,0.82)";
+          cameraRenderCtx.fillRect(rx, ry, rw, rh);
+        }
+
+        // 临界崩溃：黑块与高噪声覆盖
+        if (conn < 0.1) {
+          cameraRenderCtx.fillStyle = `rgba(0,0,0,${0.45 + (0.1 - conn) * 4})`;
+          cameraRenderCtx.fillRect(0, 0, w, h);
+        }
+        cameraRenderCtx.restore();
+      }
+
+      const camAnim = () => {
+        if (state.phase !== Phase.LOOK_CAMERA) return;
+        const t = clamp((performance.now() - startTs) / state.cameraDuration, 0, 1);
+        const conn = clamp(1 - Math.pow(t, 1.35), 0, 1);
+        state.cameraConnection = conn;
+        updateCameraIntensity(conn);
+
+        // 色彩失真随 connection 下降增强
+        cameraRenderCanvasEl.style.filter = `
+          hue-rotate(${(1 - conn) * 180}deg)
+          saturate(${1 - conn * 0.5})
+          contrast(${1 + (1 - conn) * 1.5})
+          brightness(${1 - (1 - conn) * 0.25})
+        `;
+
+        // 最终崩溃前抖动
+        if (conn < 0.12) {
+          const j = (0.12 - conn) * 60;
+          cameraRenderCanvasEl.style.transform = `translate(${(Math.random() * 2 - 1) * j}px, ${(Math.random() * 2 - 1) * j}px) scale(${1 + j * 0.002})`;
+        } else {
+          cameraRenderCanvasEl.style.transform = "";
+        }
+
+        renderCameraFrame(conn, performance.now());
+        requestAnimationFrame(camAnim);
+      };
+      camAnim();
+
+      setTimeout(() => {
+        vibrate(40);
+        cameraRecLabelEl.textContent = "SAVED";
+        cameraRecDotEl.style.opacity = "0.15";
+      }, 6000);
+
+      state.cameraTimeout = setTimeout(() => {
+        endCameraAndCloseSystem();
+      }, state.cameraDuration + 300);
+    }
+
+    function endCameraAndCloseSystem() {
+      if (state.cameraStream) {
+        state.cameraStream.getTracks().forEach((t) => t.stop());
+        state.cameraStream = null;
+        cameraVideoEl.srcObject = null;
+      }
+      cameraRenderCanvasEl.style.display = "none";
+      cameraRenderCanvasEl.style.filter = "";
+      cameraRenderCanvasEl.style.transform = "";
+      cameraViewEl.style.display = "none";
+
+      textLinesEl.innerHTML = "";
+      const l1 = appendLine("> 相机系统已关闭");
+      const l2 = appendLine("> 电力分配至核心系统");
+      setTelemetryForPhase();
+
+      typeText(l1, "> 相机系统已关闭", 50);
+      registerTimeout(() => typeText(l2, "> 电力分配至核心系统", 50), 1000);
+
+      registerTimeout(() => startPhase4(), 5000);
+    }
+
+    function startPhase4() {
+      state.phase = Phase.ENDING;
+      state.phaseStartTime = performance.now();
+      setPhaseClass(state.phase);
+      phaseLabelEl.textContent = "P4";
+      resetProgress();
+      setTelemetryForPhase();
+      joystickWrapperEl.style.display = "none";
+      textLinesEl.innerHTML = "";
+      cameraViewEl.style.display = "none";
+
+      // 渐隐遥测信息
+      let step = 0;
+      const seq = [
+        () => thrValueEl.classList.add("telemetry-muted"),
+        () => camValueEl.classList.add("telemetry-muted"),
+        () => {
+          teleSigValueEl.classList.add("telemetry-muted");
+          state.displayedSigLevel = 0;
+          updateDisplayedSignal(true);
+        },
+        () => {
+          dstValueEl.classList.add("telemetry-muted");
+          dstValueEl.textContent = "——";
+        },
+        () => {
+          callsignEl.classList.add("telemetry-muted");
+          callsignEl.textContent = `// ▓▓`;
+        },
+        () => {
+          callsignEl.textContent = "";
+        },
+      ];
+
+      function stepFade() {
+        if (step >= seq.length) return;
+        seq[step]();
+        step++;
+        registerTimeout(stepFade, 900);
+      }
+      stepFade();
+
+      registerTimeout(() => {
+        textLinesEl.innerHTML = "";
+        phase4TextEl.style.display = "block";
+      }, 6000);
+
+      registerTimeout(() => {
+        phase4TextEl.style.opacity = "1";
+      }, 6500);
+
+      registerTimeout(() => {
+        phase4RestartEl.style.display = "flex";
+      }, 7600);
+
+      sendWS({
+        id: state.id,
+        type: "end",
+        phase: 4,
+      });
+    }
+
+    // === 摇杆交互 ===
+    function setupJoystick() {
+      let rect = null;
+
+      function scheduleDelayedSend(callback, delayMs) {
+        const handle = registerTimeout(() => {
+          state.delayedInputHandles = state.delayedInputHandles.filter((item) => item !== handle);
+          callback();
+        }, delayMs);
+        state.delayedInputHandles.push(handle);
+      }
+
+      function updateFromClient(clientX, clientY) {
+        ensureInnerVoiceStarted();
+        if (!rect) rect = joystickEl.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = clientX - cx;
+        const dy = clientY - cy;
+        const maxR = rect.width * 0.5;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        let nx = dx / maxR;
+        let ny = dy / maxR;
+        if (dist > maxR) {
+          nx = dx / dist;
+          ny = dy / dist;
+          dist = maxR;
+        }
+        nx = clamp(nx, -1, 1);
+        ny = clamp(ny, -1, 1);
+        const magnitude = dist / maxR;
+        triggerOperationFriction(magnitude * 0.35 + state.instability * 0.2);
+
+        const inputDelta = Math.hypot(nx - state.lastRawJoyX, ny - state.lastRawJoyY);
+        state.lastRawJoyX = nx;
+        state.lastRawJoyY = ny;
+        state.lastInputAt = performance.now();
+        state.instability = clamp(state.instability * 0.92 + inputDelta * 0.85 + magnitude * 0.08, 0, 1);
+
+        const profile = getControlProfile();
+        const driftAmount = profile.drift;
+        const decay = clamp(profile.decay, 0, 0.995);
+        const delayMs = Math.round(profile.delayMs);
+
+        const distortedX = clamp(nx + (Math.random() * 2 - 1) * driftAmount, -1, 1);
+        const distortedY = clamp(ny + (Math.random() * 2 - 1) * driftAmount, -1, 1);
+        const sendX = clamp(distortedX * (1 - decay), -1, 1);
+        const sendY = clamp(distortedY * (1 - decay), -1, 1);
+
+        const visualX = lerp(nx, sendX, clamp(profile.feedbackLag, 0, 0.85));
+        const visualY = lerp(ny, sendY, clamp(profile.feedbackLag, 0, 0.85));
+        const visualMag = clamp(Math.hypot(visualX, visualY), 0, 1);
+        const angleDeg = Math.atan2(visualY, visualX) * 180 / Math.PI;
+
+        const send = () => {
+          state.joyX = sendX;
+          state.joyY = sendY;
+          state.joyActive = true;
+          const dxNorm = visualX;
+          const dyNorm = visualY;
+          const r = visualMag * 0.46 * rect.width;
+
+          joystickTouchEl.style.removeProperty("opacity");
+          joystickLineEl.style.removeProperty("opacity");
+
+          joystickTouchEl.style.left = "50%";
+          joystickTouchEl.style.top = "50%";
+          joystickTouchEl.style.transform = `translate(-50%, -50%) translate(${dxNorm * rect.width * 0.4}px, ${dyNorm * rect.height * 0.4}px)`;
+
+          joystickLineEl.style.width = `${r}px`;
+          joystickLineEl.style.transform = `translate(-50%, -50%) rotate(${angleDeg}deg)`;
+          joystickEl.classList.add("joystick-active");
+
+          sendWS({
+            id: state.id,
+            type: "move",
+            joyX: parseFloat(sendX.toFixed(3)),
+            joyY: parseFloat(sendY.toFixed(3)),
+            phase: state.phase === Phase.DRIFT ? 2 : 1,
+            signal: state.sigLevel,
+            delay: delayMs,
+          });
+        };
+
+        if (delayMs > 0) {
+          joystickEl.classList.add("joystick-delayed");
+          joystickTouchEl.style.opacity = String(lerp(0.65, 0.35, clamp(delayMs / 900, 0, 1)));
+          scheduleDelayedSend(send, delayMs);
+        } else {
+          send();
+        }
+      }
+
+      function endInteraction() {
+        state.joyActive = false;
+        state.lastInputAt = performance.now();
+        joystickEl.classList.remove("joystick-active", "joystick-delayed");
+        joystickTouchEl.style.removeProperty("opacity");
+        joystickLineEl.style.removeProperty("opacity");
+
+        const profile = getControlProfile();
+        const releaseDecay = clamp(profile.decay, 0, 0.995);
+        const releaseDelay = Math.round(profile.delayMs * 0.4);
+        const releaseSend = () => {
+          state.joyX = 0;
+          state.joyY = 0;
+          sendWS({
+            id: state.id,
+            type: "move",
+            joyX: 0,
+            joyY: 0,
+            phase: state.phase === Phase.DRIFT ? 2 : 1,
+            signal: state.sigLevel,
+            delay: releaseDelay,
+          });
+        };
+
+        if (releaseDecay > 0.3 || releaseDelay > 0) {
+          scheduleDelayedSend(releaseSend, releaseDelay);
+        } else {
+          releaseSend();
+        }
+      }
+
+      function releasePointerIfAny(pointerId) {
+        if (pointerId == null) return;
+        try {
+          if (joystickEl.hasPointerCapture(pointerId)) {
+            joystickEl.releasePointerCapture(pointerId);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      if (window.PointerEvent) {
+        let activePointerId = null;
+
+        joystickEl.addEventListener(
+          "pointerdown",
+          (evt) => {
+            if (!evt.isPrimary) return;
+            if (evt.pointerType === "mouse" && evt.button !== 0) return;
+            evt.preventDefault();
+            activePointerId = evt.pointerId;
+            rect = joystickEl.getBoundingClientRect();
+            try {
+              joystickEl.setPointerCapture(evt.pointerId);
+            } catch (e) {
+              // ignore
+            }
+            updateFromClient(evt.clientX, evt.clientY);
+          },
+          { passive: false }
+        );
+
+        joystickEl.addEventListener(
+          "pointermove",
+          (evt) => {
+            if (activePointerId !== evt.pointerId) return;
+            evt.preventDefault();
+            updateFromClient(evt.clientX, evt.clientY);
+          },
+          { passive: false }
+        );
+
+        function endPointer(evt) {
+          if (activePointerId !== evt.pointerId) return;
+          evt.preventDefault();
+          const pid = activePointerId;
+          activePointerId = null;
+          releasePointerIfAny(pid);
+          endInteraction();
+        }
+
+        joystickEl.addEventListener("pointerup", endPointer, { passive: false });
+        joystickEl.addEventListener("pointercancel", endPointer, { passive: false });
+        joystickEl.addEventListener("lostpointercapture", (evt) => {
+          if (activePointerId !== evt.pointerId) return;
+          activePointerId = null;
+          endInteraction();
+        });
+      } else {
+        const touchOpts = { passive: false };
+        joystickEl.addEventListener(
+          "touchstart",
+          (evt) => {
+            evt.preventDefault();
+            rect = joystickEl.getBoundingClientRect();
+            const t = evt.touches[0];
+            if (t) updateFromClient(t.clientX, t.clientY);
+          },
+          touchOpts
+        );
+        joystickEl.addEventListener(
+          "touchmove",
+          (evt) => {
+            evt.preventDefault();
+            const t = evt.touches[0];
+            if (t) updateFromClient(t.clientX, t.clientY);
+          },
+          touchOpts
+        );
+        joystickEl.addEventListener(
+          "touchend",
+          (evt) => {
+            evt.preventDefault();
+            endInteraction();
+          },
+          touchOpts
+        );
+        joystickEl.addEventListener(
+          "touchcancel",
+          (evt) => {
+            evt.preventDefault();
+            endInteraction();
+          },
+          touchOpts
+        );
+
+        joystickEl.addEventListener("mousedown", (evt) => {
+          evt.preventDefault();
+          rect = joystickEl.getBoundingClientRect();
+          updateFromClient(evt.clientX, evt.clientY);
+          function onMove(e) {
+            updateFromClient(e.clientX, e.clientY);
+          }
+          function onUp() {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            endInteraction();
+          }
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        });
+      }
+    }
+
+    // === 启动 ===
+    restartBtnEl.addEventListener("click", restartExperience);
+
+    window.addEventListener("load", () => {
+      state.startTime = performance.now();
+      assignVoyagerNum();
+      initWebSocket();
+      setupJoystick();
+      startPhase0();
+    });
+
+    window.addEventListener("pointerdown", ensureInnerVoiceStarted, { passive: true });
+    window.addEventListener("touchstart", ensureInnerVoiceStarted, { passive: true });
+    window.addEventListener("keydown", ensureInnerVoiceStarted);
+  </script>
+</body>
+</html>
+
