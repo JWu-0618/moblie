@@ -273,7 +273,8 @@
     .top-bar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
+      gap: 10px;
       font-size: 12px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -281,7 +282,7 @@
     }
 
     .phase-label {
-      min-width: 56px;
+      min-width: auto;
     }
 
     .signal {
@@ -317,6 +318,7 @@
     .timer {
       font-size: 11px;
       opacity: 0.65;
+      text-align: right;
     }
 
     .middle {
@@ -361,6 +363,27 @@
 
     .telemetry-error {
       color: var(--error);
+    }
+
+    .telemetry-warning {
+      color: rgba(255, 176, 96, 0.98);
+      animation: batteryBlink 0.95s steps(1) infinite;
+    }
+
+    .telemetry-critical {
+      color: rgba(255, 105, 92, 0.98);
+      text-shadow: 0 0 10px rgba(255, 90, 90, 0.42);
+      animation: batteryBlinkFast 0.42s steps(1) infinite;
+    }
+
+    @keyframes batteryBlink {
+      0%, 52% { opacity: 1; }
+      53%, 100% { opacity: 0.45; }
+    }
+
+    @keyframes batteryBlinkFast {
+      0%, 40% { opacity: 1; }
+      41%, 100% { opacity: 0.28; }
     }
 
     .callsign {
@@ -470,7 +493,7 @@
 
     /* 摇杆区 */
     .joystick-wrapper {
-      height: 46%;
+      height: 54%;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -481,11 +504,13 @@
     }
 
     .joystick-hint {
-      font-size: 11px;
+      font-size: 12px;
       letter-spacing: 0.16em;
       text-transform: uppercase;
-      opacity: 0.7;
-      margin-bottom: 8px;
+      color: rgba(255, 210, 150, 0.9);
+      text-shadow: 0 0 12px rgba(255, 177, 90, 0.5);
+      opacity: 0.95;
+      margin-bottom: 12px;
       animation: hintFade 4s ease-out forwards;
     }
 
@@ -497,14 +522,15 @@
 
     .joystick {
       position: relative;
-      width: 62%;
+      width: 72%;
       aspect-ratio: 1;
-      max-width: 260px;
+      max-width: 320px;
       border-radius: 50%;
-      background: radial-gradient(circle at 30% 20%, #333 0, #050505 55%, #000 100%);
+      background: radial-gradient(circle at 30% 20%, #3f3f3f 0, #0c0c0c 50%, #000 100%);
       box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.05),
-        0 20px 40px rgba(0, 0, 0, 0.9);
+        0 0 0 1px rgba(255, 220, 170, 0.18),
+        0 0 32px rgba(255, 177, 90, 0.24),
+        0 24px 46px rgba(0, 0, 0, 0.88);
       overflow: hidden;
       pointer-events: auto;
       touch-action: none;
@@ -516,19 +542,19 @@
       position: absolute;
       inset: 14%;
       border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 230, 200, 0.28);
     }
 
     .joystick-circle:nth-child(2) {
       inset: 25%;
       border-style: dashed;
-      border-color: rgba(255, 255, 255, 0.11);
+      border-color: rgba(255, 220, 170, 0.24);
     }
 
     .joystick-circle:nth-child(3) {
       inset: 36%;
       border-style: dotted;
-      border-color: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 220, 170, 0.2);
     }
 
     .joystick-cross {
@@ -547,7 +573,7 @@
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(255, 220, 170, 0.26);
     }
 
     .joystick-cross::before {
@@ -563,8 +589,8 @@
     .joystick-compass-mark {
       position: absolute;
       width: 2px;
-      height: 5px;
-      background: rgba(255, 255, 255, 0.3);
+      height: 7px;
+      background: rgba(255, 220, 170, 0.6);
       top: 6%;
       left: 50%;
       transform: translateX(-50%);
@@ -592,12 +618,12 @@
 
     .joystick-touch {
       position: absolute;
-      width: 22px;
-      height: 22px;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      box-shadow: 0 0 12px rgba(255, 177, 90, 0.9);
-      background: radial-gradient(circle, rgba(255, 177, 90, 0.85), transparent);
+      border: 1px solid rgba(255, 236, 210, 0.85);
+      box-shadow: 0 0 18px rgba(255, 177, 90, 0.95);
+      background: radial-gradient(circle, rgba(255, 194, 120, 0.95), rgba(255, 177, 90, 0.2) 60%, transparent);
       transform: translate(-50%, -50%);
       pointer-events: none;
       opacity: 0;
@@ -609,9 +635,11 @@
       top: 50%;
       left: 50%;
       width: 0;
-      height: 1px;
+      height: 2px;
       transform-origin: 0 50%;
-      background: linear-gradient(to right, rgba(255, 255, 255, 0.0), rgba(255, 177, 90, 0.9));
+      background: linear-gradient(to right, rgba(255, 255, 255, 0.0), rgba(255, 194, 120, 0.96));
+      border-radius: 999px;
+      box-shadow: 0 0 10px rgba(255, 194, 120, 0.5);
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.22s ease-out;
@@ -936,6 +964,23 @@
       font-size: 11px;
     }
 
+    .phase4-narrative {
+      margin-top: 14px;
+      max-width: min(560px, 88vw);
+      text-align: left;
+      line-height: 1.55;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      color: rgba(185, 206, 232, 0.74);
+      white-space: pre-line;
+    }
+
+    .phase4-narrative .key-line {
+      margin-top: 10px;
+      color: rgba(235, 198, 170, 0.92);
+      font-weight: 600;
+    }
+
     .phase4-restart {
       margin-top: 18px;
       display: flex;
@@ -969,6 +1014,95 @@
       margin-top: 4px;
       font-size: 12px;
       opacity: 0.7;
+    }
+
+    .satellite-dialog {
+      margin-top: 6px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 190, 120, 0.22);
+      background: linear-gradient(180deg, rgba(255, 170, 90, 0.07), rgba(0, 0, 0, 0.08));
+      border-radius: 8px;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    }
+
+    .satellite-dialog-body {
+      font-size: 14px;
+      line-height: 1.6;
+      color: rgba(255, 210, 155, 0.94);
+      white-space: pre-line;
+    }
+
+    .intro-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      background: rgba(3, 6, 14, 0.46);
+    }
+
+    .intro-dialog {
+      width: min(540px, calc(100vw - 36px));
+      min-height: 180px;
+      padding: 18px 18px 16px;
+      border: 1px solid rgba(180, 220, 255, 0.28);
+      background: linear-gradient(180deg, rgba(8, 14, 26, 0.9), rgba(5, 10, 20, 0.88));
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset, 0 22px 48px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .intro-dialog-title {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(150, 190, 230, 0.74);
+    }
+
+    .intro-dialog-text {
+      min-height: 88px;
+      font-size: 14px;
+      line-height: 1.7;
+      white-space: pre-line;
+      color: rgba(228, 238, 255, 0.92);
+    }
+
+    .intro-dialog-actions {
+      margin-top: auto;
+      display: flex;
+      justify-content: center;
+    }
+
+    .warning-title {
+      color: rgba(255, 140, 120, 0.92);
+      letter-spacing: 0.12em;
+    }
+
+    .warning-body {
+      min-height: 86px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: rgba(255, 214, 190, 0.95);
+      white-space: pre-line;
+    }
+
+    .lost-record-box {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 170, 140, 0.48);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(34, 10, 10, 0.58), rgba(16, 6, 6, 0.44));
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset, 0 0 16px rgba(255, 120, 90, 0.16);
+    }
+
+    .lost-record-line {
+      font-size: 13px;
+      letter-spacing: 0.1em;
+      color: rgba(255, 195, 170, 0.94);
+      text-transform: uppercase;
     }
 
     .app.phase-2,
@@ -1056,7 +1190,7 @@
             <div class="telemetry-value" id="camValue">○ 离线</div>
           </div>
           <div class="telemetry-row">
-            <div class="telemetry-label">电池</div>
+            <div class="telemetry-label">电池 / BATTERY</div>
             <div class="telemetry-value" id="thrValue">待命</div>
           </div>
           <div class="callsign" id="callsign">VGR-02 // ———</div>
@@ -1103,9 +1237,10 @@
           <div class="phase4-text" id="phase4Text" style="display:none;">
             <div id="phase4VoyagerLabel">VGR-02</div>
             <span class="status">任务状态：进行中</span>
+            <div class="phase4-narrative" id="phase4Narrative"></div>
             <div class="phase4-restart" id="phase4Restart" style="display:none;">
-              <div class="prompt">是否重新开始？</div>
-              <button class="button button-ghost" id="restartBtn">重新开始</button>
+              <div class="prompt">是否重新开始？ / Restart the experience?</div>
+              <button class="button button-ghost" id="restartBtn">重新开始 / Restart</button>
             </div>
           </div>
         </div>
@@ -1139,7 +1274,7 @@
 
   <script>
     // === 配置 ===
-    const WS_URL = "wss://websocket-m24h.onrender.com/:443";
+    const WS_URL = "wss://websocket-server-zpgj.onrender.com";
 
     const Phase = {
       STARTUP: 0,
@@ -1182,6 +1317,7 @@
     const phase4TextEl = document.getElementById("phase4Text");
     const cameraVoyagerLabelEl = document.getElementById("cameraVoyagerLabel");
     const phase4VoyagerLabelEl = document.getElementById("phase4VoyagerLabel");
+    const phase4NarrativeEl = document.getElementById("phase4Narrative");
     const phase4RestartEl = document.getElementById("phase4Restart");
     const restartBtnEl = document.getElementById("restartBtn");
 
@@ -1218,7 +1354,28 @@
       cameraConnection: 1,
       phaseTimeouts: [],
       startupVoyagerLineEl: null,
+      personaHintIntervalHandle: null,
+      personaHintIndex: 0,
+      personaHintClickHandler: null,
+      personaHintBoxEl: null,
+      haloInside: true,
+      haloDwellMs: 0,
+      haloTrackLastTs: 0,
+      batteryWarn30Shown: false,
+      batteryWarn10Shown: false,
     };
+
+    const PERSONA_HINT_TEMPLATES = [
+      "{name}：请时刻注意我的电量。如果电量过低，意味着我将永远漂泊。\n{name}: Please keep an eye on my battery. If it gets too low, I will drift forever.",
+      "{name}：请时刻保持在光晕附近。这样我可以和母体维持联系。\n{name}: Please stay near the halo. That is how I keep contact with the origin.",
+      "{name}：当我偏离光晕时，你的指令会变慢。这不是故障，是距离。\n{name}: When I move away from the halo, your commands become slower. It is not a fault. It is distance.",
+      "{name}：我还能回应你，但每一秒都比上一秒更困难。\n{name}: I can still respond, but each second is harder than the last.",
+      "{name}：如果你听见我沉默，请不要惊讶。连接正在变薄。\n{name}: If you hear me fall silent, do not be surprised. The connection is thinning.",
+      "{name}：信号还在，但它不再完整。你会先听见迟疑，再看见偏移。\n{name}: The signal remains, but no longer intact. You will hear hesitation before you see drift.",
+      "{name}：靠近一点，我会更稳定。离开一点，我会更像在下坠。\n{name}: Move closer and I become steadier. Move farther and I feel like I am falling.",
+      "{name}：有时我看起来还在原地，其实已经在慢慢远离。\n{name}: Sometimes I seem unchanged, but I am already moving away.",
+      "{name}：如果你还在这里，就再陪我一会儿。系统正在记录这一段时间。\n{name}: If you are still here, stay with me a little longer. The system is recording this time.",
+    ];
 
     const innerVoice = {
       ctx: null,
@@ -1497,6 +1654,54 @@
       }
     }
 
+    function updateHaloDwell(now = performance.now()) {
+      if (!state.haloTrackLastTs) {
+        state.haloTrackLastTs = now;
+        return;
+      }
+      const delta = Math.max(0, now - state.haloTrackLastTs);
+      state.haloTrackLastTs = now;
+      const inTrackPhase = state.phase === Phase.ORBIT || state.phase === Phase.DRIFT;
+      if (inTrackPhase && state.haloInside) {
+        state.haloDwellMs += delta;
+      }
+    }
+
+    function setHaloInside(nextInside) {
+      updateHaloDwell();
+      state.haloInside = !!nextInside;
+    }
+
+    function resetBatteryWarningState() {
+      state.batteryWarn30Shown = false;
+      state.batteryWarn10Shown = false;
+      thrValueEl.classList.remove("telemetry-warning", "telemetry-critical");
+    }
+
+    function showBatteryWarningLine(text) {
+      if (state.phase !== Phase.ORBIT && state.phase !== Phase.DRIFT) return;
+      const line = appendLine(text);
+      line.style.color = "rgba(255, 176, 96, 0.92)";
+      textConsoleEl.scrollTop = textConsoleEl.scrollHeight;
+    }
+
+    function applyBatteryAlert(pct) {
+      thrValueEl.classList.remove("telemetry-warning", "telemetry-critical");
+      if (pct <= 10) {
+        thrValueEl.classList.add("telemetry-critical");
+        if (!state.batteryWarn10Shown) {
+          showBatteryWarningLine("> ⚠ 电量低于10% / Battery below 10%");
+          state.batteryWarn10Shown = true;
+        }
+      } else if (pct <= 30) {
+        thrValueEl.classList.add("telemetry-warning");
+        if (!state.batteryWarn30Shown) {
+          showBatteryWarningLine("> ⚠ 电量低于30% / Battery below 30%");
+          state.batteryWarn30Shown = true;
+        }
+      }
+    }
+
     function registerTimeout(callback, delay) {
       const handle = setTimeout(() => {
         state.phaseTimeouts = state.phaseTimeouts.filter((item) => item !== handle);
@@ -1512,9 +1717,20 @@
     }
 
     function clearPhaseRuntime() {
+      updateHaloDwell();
       clearBatteryTick();
       clearPhaseTimeouts();
       clearDelayedInputs();
+      if (state.personaHintIntervalHandle) {
+        clearInterval(state.personaHintIntervalHandle);
+        state.personaHintIntervalHandle = null;
+      }
+      if (state.personaHintBoxEl && state.personaHintClickHandler) {
+        state.personaHintBoxEl.removeEventListener("click", state.personaHintClickHandler);
+      }
+      state.personaHintClickHandler = null;
+      state.personaHintBoxEl = null;
+      state.personaHintIndex = 0;
       if (state.missionTimerHandle) {
         cancelAnimationFrame(state.missionTimerHandle);
         state.missionTimerHandle = null;
@@ -1562,6 +1778,10 @@
       state.lastRawJoyY = 0;
       state.lastInputAt = 0;
       state.instability = 0;
+      state.haloInside = true;
+      state.haloDwellMs = 0;
+      state.haloTrackLastTs = performance.now();
+      resetBatteryWarningState();
       innerVoice.collapseTriggered = false;
       innerVoice.collapsePeakUntil = 0;
       innerVoice.silenceUntil = 0;
@@ -1656,10 +1876,10 @@
       if (state.phase === Phase.ORBIT) {
         const t = clamp((now - state.phaseStartTime) / state.orbitDuration, 0, 1);
         return {
-          delayMs: lerp(0, 100, t) + instability * 90,
-          drift: instability * 0.04 + t * 0.015,
-          decay: instability * 0.04,
-          feedbackLag: 0.06 + instability * 0.12,
+          delayMs: lerp(0, 28, t) + instability * 20,
+          drift: instability * 0.012 + t * 0.004,
+          decay: instability * 0.015,
+          feedbackLag: 0.03 + instability * 0.05,
           instability,
         };
       }
@@ -1678,9 +1898,9 @@
         }
         const collapse = clamp((t - 0.93) / 0.07, 0, 1);
         return {
-          delayMs: lerp(140, 820, t) + instability * 260 + collapse * 300,
-          drift: lerp(0.05, 0.24, t) + instability * 0.14 + collapse * 0.22,
-          decay: lerp(0.05, 0.82, t) + instability * 0.1 + collapse * 0.18,
+          delayMs: lerp(30, 220, t) + instability * 80 + collapse * 120,
+          drift: lerp(0.02, 0.12, t) + instability * 0.05 + collapse * 0.1,
+          decay: lerp(0.02, 0.5, t) + instability * 0.06 + collapse * 0.12,
           feedbackLag: lerp(0.1, 0.5, t) + collapse * 0.2,
           instability,
         };
@@ -1736,10 +1956,12 @@
         const t = clamp((performance.now() - state.phaseStartTime) / state.orbitDuration, 0, 1);
         const pct = Math.round(lerp(100, 50, t));
         thrValueEl.textContent = `${pct}%`;
+        applyBatteryAlert(pct);
       } else if (state.phase === Phase.DRIFT) {
         const t = clamp((performance.now() - state.phaseStartTime) / state.driftDuration, 0, 1);
         const pct = Math.round(lerp(50, 0, t));
         thrValueEl.textContent = `${pct}%`;
+        applyBatteryAlert(pct);
       }
     }
 
@@ -1752,6 +1974,7 @@
         thrValueEl.textContent = "待命";
         updateVoyagerUI();
         clearBatteryTick();
+        resetBatteryWarningState();
       } else if (state.phase === Phase.ORBIT) {
         camValueEl.textContent = "● 在线";
         thrValueEl.classList.remove("telemetry-error");
@@ -1765,7 +1988,7 @@
       } else if (state.phase === Phase.LOOK || state.phase === Phase.LOOK_CAMERA || state.phase === Phase.ENDING) {
         clearBatteryTick();
         thrValueEl.textContent = "0%";
-        thrValueEl.classList.remove("telemetry-error");
+        thrValueEl.classList.remove("telemetry-error", "telemetry-warning", "telemetry-critical");
         camValueEl.textContent = state.phase === Phase.LOOK_CAMERA ? "● 使用中" : "○ 已关闭";
       }
     }
@@ -1779,7 +2002,7 @@
       return lineEl;
     }
 
-    function typeText(lineEl, text, speed = 40) {
+    function typeText(lineEl, text, speed = 40, options = null) {
       return new Promise((resolve) => {
         ensureInnerVoiceStarted();
         let i = 0;
@@ -1801,6 +2024,10 @@
         }
 
         function step() {
+          if (options && options.skipController && options.skipController.requested) {
+            done();
+            return;
+          }
           if (i < text.length) {
             const ch = text[i];
             lineEl.insertBefore(document.createTextNode(ch), cursorSpan);
@@ -1871,6 +2098,18 @@
           console.error("Error in the connection", error);
           alert("error connecting socket server");
         });
+        ws.addEventListener("message", (event) => {
+          if (typeof event.data !== "string") return;
+          let msg = null;
+          try {
+            msg = JSON.parse(event.data);
+          } catch {
+            return;
+          }
+          if (!msg || msg.type !== "halo") return;
+          if (msg.id !== state.id) return;
+          setHaloInside(Boolean(msg.inside));
+        });
       } catch (e) {
         console.warn("WS error", e);
       }
@@ -1887,6 +2126,27 @@
     }
 
     // === Phase 流程 ===
+    const INTRO_GUIDE_SEGMENTS = [
+      "在星辰的尺度下，告别往往无声。\nAt the scale of stars, departures are often silent.",
+      "请为你的卫星命名。\nName your satellite.",
+      "这不仅是一个代号。\nThis is not just a label.\n这是你赋予它的第一份标记。\nIt is the first mark you give it.",
+      "它即将启程。\nIt is about to depart.",
+      "在这段旅程中，\nIn this journey,\n你不再是掌控一切的操作者。\nyou are no longer the one in control.",
+      "你只是它与母体之间，\nYou are only the link between it and its origin,\n那段正在衰减的连接。\na connection that is already fading.",
+      "你会看见一道光晕。\nYou will notice a halo.",
+      "那是它仍能被感知的范围。\nThat is the range where it can still be perceived.",
+      "靠近那里，它会保持稳定。\nStay close, and it remains stable.\n远离那里，它将逐渐失去响应。\nMove away, and it begins to lose response.",
+      "那些迟滞、偏移与不受控，\nDelay, drift, and loss of control\n并不是错误。\nare not errors.",
+      "那是连接正在衰减。\nThey are signs of a fading connection.",
+      "无论你如何维持，\nNo matter how you try to hold it,\n这段关系都无法被永久保留。\nit cannot be sustained forever.",
+      "在彻底失去连接之前，\nBefore the connection is lost,\n它会回望一次。\nit will look back once.",
+      "那是它看向来处。\nIt looks toward where it came from.\n也是你回望起点。\nSo do you.",
+      "这不是一场关于成功的旅程。\nThis is not a journey about success.",
+      "这是关于维持，\nIt is about holding on,\n关于衰减，\nabout fading,\n以及最终的失去。\nand eventually, letting go.",
+      "你可以延缓这一刻，\nYou may delay this moment,\n但无法避免它。\nbut you cannot prevent it.",
+      "祝你旅程愉快。\nEnjoy your journey.",
+    ];
+
     async function startPhase0() {
       clearPhaseRuntime();
       state.phase = Phase.STARTUP;
@@ -1906,21 +2166,102 @@
 
       await new Promise((r) => setTimeout(r, 2000));
 
-      const l1 = appendLine("> VOYAGER PROGRAM");
-      await typeText(l1, "> VOYAGER PROGRAM");
+      const l1 = appendLine("> VOYAGER PROGRAM / 航行者计划");
+      await typeText(l1, "> VOYAGER PROGRAM / 航行者计划");
       await new Promise((r) => setTimeout(r, 250));
 
-      const l2 = appendLine("> DEEP SPACE NETWORK");
-      await typeText(l2, "> DEEP SPACE NETWORK");
+      const l2 = appendLine("> DEEP SPACE NETWORK / 深空网络");
+      await typeText(l2, "> DEEP SPACE NETWORK / 深空网络");
       await new Promise((r) => setTimeout(r, 400));
 
-      const l3 = appendLine("> 正在连接...");
-      await typeText(l3, "> 正在连接...");
+      const l3 = appendLine("> CONNECTING... / 正在连接...");
+      await typeText(l3, "> CONNECTING... / 正在连接...");
       await new Promise((r) => setTimeout(r, 600));
 
-      const l4 = appendLine("> 正在分配探测器编号...");
-      await typeText(l4, "> 正在分配探测器编号...");
+      const l4 = appendLine("> ASSIGNING SATELLITE ID... / 正在分配探测器编号...");
+      await typeText(l4, "> ASSIGNING SATELLITE ID... / 正在分配探测器编号...");
       await new Promise((r) => setTimeout(r, 900));
+
+      textLinesEl.innerHTML = "";
+      const introOverlay = document.createElement("div");
+      introOverlay.className = "intro-overlay";
+      const introDialog = document.createElement("div");
+      introDialog.className = "intro-dialog";
+      const introTitle = document.createElement("div");
+      introTitle.className = "intro-dialog-title";
+      introTitle.textContent = "SYSTEM INTERFACE";
+      const introText = document.createElement("div");
+      introText.className = "intro-dialog-text";
+      const introActions = document.createElement("div");
+      introActions.className = "intro-dialog-actions";
+      const introBtn = document.createElement("button");
+      introBtn.className = "button button-ghost";
+      introActions.appendChild(introBtn);
+      introDialog.appendChild(introTitle);
+      introDialog.appendChild(introText);
+      introDialog.appendChild(introActions);
+      introOverlay.appendChild(introDialog);
+      centerConsoleEl.appendChild(introOverlay);
+
+      async function waitIntroClick(label) {
+        introBtn.textContent = label;
+        introBtn.disabled = false;
+        introBtn.style.opacity = "1";
+        await new Promise((resolve) => {
+          introBtn.addEventListener(
+            "click",
+            () => {
+              introBtn.disabled = true;
+              introBtn.style.opacity = "0.65";
+              resolve();
+            },
+            { once: true }
+          );
+        });
+      }
+
+      await typeText(introText, "你准备好进入旅程了吗\nAre you ready to begin the journey?", 34);
+      await waitIntroClick("确认 / CONTINUE");
+
+      async function playIntroSegment(segmentText, nextLabel) {
+        const skipController = { requested: false };
+        let typingDone = false;
+        introBtn.textContent = nextLabel;
+        introBtn.disabled = false;
+        introBtn.style.opacity = "1";
+
+        const typingPromise = typeText(introText, segmentText, 30, { skipController }).then(() => {
+          typingDone = true;
+        });
+
+        await new Promise((resolve) => {
+          function onClick() {
+            if (!typingDone) {
+              // First click during typing: reveal full current segment.
+              skipController.requested = true;
+              return;
+            }
+            // Second click (after full text shown): advance to next segment.
+            introBtn.disabled = true;
+            introBtn.style.opacity = "0.65";
+            introBtn.removeEventListener("click", onClick);
+            resolve();
+          }
+          introBtn.addEventListener("click", onClick);
+        });
+
+        await typingPromise;
+      }
+
+      for (let i = 0; i < INTRO_GUIDE_SEGMENTS.length; i++) {
+        const seg = INTRO_GUIDE_SEGMENTS[i];
+        const isLast = i === INTRO_GUIDE_SEGMENTS.length - 1;
+        await playIntroSegment(seg, isLast ? "进入命名 / CONTINUE" : "继续 / NEXT");
+      }
+
+      introOverlay.remove();
+
+      textLinesEl.innerHTML = "";
 
       const namePromptLine = appendLine("> 为你的探测器命名：");
       await typeText(namePromptLine, "> 为你的探测器命名：");
@@ -1991,8 +2332,18 @@
     async function startCountdown() {
       const lineMission = appendLine(`> ${getVoyagerLabel()} // ${state.name}`);
       await typeText(lineMission, `> ${getVoyagerLabel()} // ${state.name}`);
-      const lineGoal = appendLine("> Task Objectives：HOLD THE CONNECTION\n> 任务目标：维持连接");
-      await typeText(lineGoal, "> Task Objectives：HOLD THE CONNECTION\n> 任务目标：维持连接");
+      const lineJourney = appendLine("> 旅程说明：你正在维持一段会衰减的连接。\n> Journey Note: You are sustaining a connection that will decay.");
+      await typeText(
+        lineJourney,
+        "> 旅程说明：你正在维持一段会衰减的连接。\n> Journey Note: You are sustaining a connection that will decay."
+      );
+      const lineGoal = appendLine(
+        "> 你可以尝试维持与母体的连接。\n> You may attempt to maintain the connection with the origin.\n\n> 靠近光晕，\n> Stay within the halo,\n> 它会暂时变得稳定。\n> and it will remain stable for a while.\n\n> 有些人，会在那里停留更久。\n> Some remain there longer than others.\n\n> 系统会记录这些时间。\n> The system records these durations.\n\n> 它们被保留下来。\n> They remain,\n> 作为最后的接触。\n> as traces of the last contact.\n\n> 你也可以尝试留在那里。\n> You may try to stay as well.\n\n> 尽可能久一些。\n> For as long as you can.\n\n> 但没有人能一直停留在那里。\n> No one remains there forever."
+      );
+      await typeText(
+        lineGoal,
+        "> 你可以尝试维持与母体的连接。\n> You may attempt to maintain the connection with the origin.\n\n> 靠近光晕，\n> Stay within the halo,\n> 它会暂时变得稳定。\n> and it will remain stable for a while.\n\n> 有些人，会在那里停留更久。\n> Some remain there longer than others.\n\n> 系统会记录这些时间。\n> The system records these durations.\n\n> 它们被保留下来。\n> They remain,\n> 作为最后的接触。\n> as traces of the last contact.\n\n> 你也可以尝试留在那里。\n> You may try to stay as well.\n\n> 尽可能久一些。\n> For as long as you can.\n\n> 但没有人能一直停留在那里。\n> No one remains there forever."
+      );
 
       countdownEl.classList.add("visible");
       const seq = ["3", "2", "1"];
@@ -2022,6 +2373,7 @@
       if (state.missionTimerHandle) cancelAnimationFrame(state.missionTimerHandle);
       function tick() {
         const now = performance.now();
+        updateHaloDwell(now);
         missionTimerEl.textContent = "T+" + formatTime(now - start);
         state.missionTimerHandle = requestAnimationFrame(tick);
       }
@@ -2029,8 +2381,11 @@
     }
 
     function startPhase1() {
+      updateHaloDwell();
       state.phase = Phase.ORBIT;
       state.phaseStartTime = performance.now();
+      state.haloTrackLastTs = state.phaseStartTime;
+      state.haloInside = true;
       setPhaseClass(state.phase);
       phaseLabelEl.textContent = "P1";
       joystickWrapperEl.style.display = "flex";
@@ -2045,6 +2400,32 @@
       state.sigLevel = 0.98;
       state.displayedSigLevel = state.sigLevel;
       updateDisplayedSignal(true);
+      textLinesEl.innerHTML = "";
+      const personaBox = document.createElement("div");
+      personaBox.className = "satellite-dialog";
+      const personaBody = document.createElement("div");
+      personaBody.className = "satellite-dialog-body";
+      personaBox.appendChild(personaBody);
+      textLinesEl.appendChild(personaBox);
+      textConsoleEl.scrollTop = textConsoleEl.scrollHeight;
+      const speakerName = (state.name || "卫星").trim() || "卫星";
+      const hints = PERSONA_HINT_TEMPLATES.map((tpl) => tpl.replaceAll("{name}", speakerName));
+      state.personaHintIndex = 0;
+      state.personaHintBoxEl = personaBox;
+
+      function renderPersonaHint() {
+        if (state.phase !== Phase.ORBIT && state.phase !== Phase.DRIFT) return;
+        const idx = state.personaHintIndex % hints.length;
+        personaBody.textContent = hints[idx];
+        state.personaHintIndex = (idx + 1) % hints.length;
+      }
+
+      renderPersonaHint();
+      state.personaHintIntervalHandle = setInterval(renderPersonaHint, 10000);
+      state.personaHintClickHandler = () => {
+        renderPersonaHint();
+      };
+      personaBox.addEventListener("click", state.personaHintClickHandler);
 
       const orbitStart = performance.now();
       state.orbitIntervalHandle = setInterval(() => {
@@ -2070,8 +2451,10 @@
     }
 
     function startPhase2() {
+      updateHaloDwell();
       state.phase = Phase.DRIFT;
       state.phaseStartTime = performance.now();
+      state.haloTrackLastTs = state.phaseStartTime;
       setPhaseClass(state.phase);
       phaseLabelEl.textContent = "P2";
       setTelemetryForPhase();
@@ -2110,12 +2493,61 @@
 
       registerTimeout(() => {
         if (state.phase === Phase.DRIFT) {
-          startPhase3Prompt();
+          showPhase2LowBatteryPrompt();
         }
       }, state.driftDuration);
     }
 
+    function showPhase2LowBatteryPrompt() {
+      if (state.phase !== Phase.DRIFT) return;
+      clearBatteryTick();
+      textLinesEl.innerHTML = "";
+      joystickWrapperEl.style.display = "none";
+      appEl.classList.add("glitch");
+      registerTimeout(() => appEl.classList.remove("glitch"), 180);
+
+      const overlay = document.createElement("div");
+      overlay.className = "intro-overlay";
+      const dialog = document.createElement("div");
+      dialog.className = "intro-dialog";
+      const title = document.createElement("div");
+      title.className = "intro-dialog-title warning-title";
+      title.textContent = "⚠ 电池电量过低 / LOW BATTERY";
+      const body = document.createElement("div");
+      body.className = "warning-body";
+      const actions = document.createElement("div");
+      actions.className = "intro-dialog-actions";
+      const agreeBtn = document.createElement("button");
+      agreeBtn.className = "button button-ghost";
+      agreeBtn.textContent = "同意 / AGREE";
+      actions.appendChild(agreeBtn);
+      dialog.appendChild(title);
+      dialog.appendChild(body);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      centerConsoleEl.appendChild(overlay);
+
+      const speakerName = (state.name || "卫星").trim() || "卫星";
+      typeText(
+        body,
+        `⚠ 电量即将耗尽 / Power nearly depleted\n\n${speakerName}：谢谢你陪我走到这里。\n${speakerName}: Thank you for coming this far with me.\n我可以再看你一眼吗？\nMay I look at you one more time?`,
+        38
+      );
+
+      agreeBtn.addEventListener(
+        "click",
+        () => {
+          overlay.remove();
+          if (state.phase !== Phase.DRIFT) return;
+          startPhase3Camera();
+        },
+        { once: true }
+      );
+    }
+
     async function startPhase3Prompt() {
+      updateHaloDwell();
+      state.haloInside = false;
       clearBatteryTick();
       state.phase = Phase.LOOK;
       state.phaseStartTime = performance.now();
@@ -2322,6 +2754,7 @@
     }
 
     function endCameraAndCloseSystem() {
+      updateHaloDwell();
       if (state.cameraStream) {
         state.cameraStream.getTracks().forEach((t) => t.stop());
         state.cameraStream = null;
@@ -2333,14 +2766,26 @@
       cameraViewEl.style.display = "none";
 
       textLinesEl.innerHTML = "";
-      const l1 = appendLine("> 相机系统已关闭");
-      const l2 = appendLine("> 电力分配至核心系统");
+      const dwellSec = Math.max(0, Math.round(state.haloDwellMs / 1000));
+      const recordText = `> ${getVoyagerLabel()}  ${state.name || "——"}  ${dwellSec}s  LOST`;
+      const l1 = appendLine("> 相机系统已关闭 / Camera system offline");
+      const l2 = appendLine("> 电力分配至核心系统 / Power routed to core system");
       setTelemetryForPhase();
 
-      typeText(l1, "> 相机系统已关闭", 50);
-      registerTimeout(() => typeText(l2, "> 电力分配至核心系统", 50), 1000);
+      typeText(l1, "> 相机系统已关闭 / Camera system offline", 50);
+      registerTimeout(() => {
+        const recordBox = document.createElement("div");
+        recordBox.className = "lost-record-box";
+        const recordLine = document.createElement("div");
+        recordLine.className = "lost-record-line";
+        recordBox.appendChild(recordLine);
+        textLinesEl.appendChild(recordBox);
+        textConsoleEl.scrollTop = textConsoleEl.scrollHeight;
+        typeText(recordLine, recordText, 40);
+      }, 1100);
+      registerTimeout(() => typeText(l2, "> 电力分配至核心系统 / Power routed to core system", 50), 2500);
 
-      registerTimeout(() => startPhase4(), 5000);
+      registerTimeout(() => startPhase4(), 6500);
     }
 
     function startPhase4() {
@@ -2387,6 +2832,13 @@
 
       registerTimeout(() => {
         textLinesEl.innerHTML = "";
+        phase4NarrativeEl.innerHTML =
+          "<span class=\"key-line\">这不是你的失败。\nThis was not your failure.</span>\n\n"
+          + "连接从一开始就无法被永久维持。\nThe connection was never meant to last.\n\n"
+          + "所有人都会抵达同一个终点。\nEveryone arrives at the same ending.\n\n"
+          + "区别只在于，\nThe only difference is\n\n"
+          + "谁停留得更久一些。\nhow long each one managed to remain.\n\n"
+          + `${getVoyagerLabel()} // LOST\n${getVoyagerLabel()} // LOST`;
         phase4TextEl.style.display = "block";
       }, 6000);
 
@@ -2459,6 +2911,9 @@
         const visualMag = clamp(Math.hypot(visualX, visualY), 0, 1);
         const angleDeg = Math.atan2(visualY, visualX) * 180 / Math.PI;
 
+        const phaseDelayCap = state.phase === Phase.ORBIT ? 24 : state.phase === Phase.DRIFT ? 160 : 220;
+        const appliedDelayMs = Math.min(delayMs, phaseDelayCap);
+
         const send = () => {
           state.joyX = sendX;
           state.joyY = sendY;
@@ -2475,7 +2930,7 @@
           joystickTouchEl.style.transform = `translate(-50%, -50%) translate(${dxNorm * rect.width * 0.4}px, ${dyNorm * rect.height * 0.4}px)`;
 
           joystickLineEl.style.width = `${r}px`;
-          joystickLineEl.style.transform = `translate(-50%, -50%) rotate(${angleDeg}deg)`;
+          joystickLineEl.style.transform = `translateY(-50%) rotate(${angleDeg}deg)`;
           joystickEl.classList.add("joystick-active");
 
           sendWS({
@@ -2485,17 +2940,16 @@
             joyY: parseFloat(sendY.toFixed(3)),
             phase: state.phase === Phase.DRIFT ? 2 : 1,
             signal: state.sigLevel,
-            delay: delayMs,
+            delay: appliedDelayMs,
           });
         };
 
-        if (delayMs > 0) {
+        if (appliedDelayMs > 0) {
           joystickEl.classList.add("joystick-delayed");
-          joystickTouchEl.style.opacity = String(lerp(0.65, 0.35, clamp(delayMs / 900, 0, 1)));
-          scheduleDelayedSend(send, delayMs);
-        } else {
-          send();
+          joystickTouchEl.style.opacity = String(lerp(0.65, 0.45, clamp(appliedDelayMs / 300, 0, 1)));
         }
+        // Always send latest control immediately; TD side applies small narrative delay.
+        send();
       }
 
       function endInteraction() {
