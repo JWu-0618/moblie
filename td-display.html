@@ -1,0 +1,2149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>departure — TD 大屏</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    #gl, #cv {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #gl {
+      z-index: 0;
+    }
+    #cv {
+      z-index: 1;
+      background: transparent;
+      pointer-events: none;
+    }
+    #hud {
+      position: fixed;
+      left: 12px;
+      top: 10px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255, 180, 100, 0.45);
+      pointer-events: none;
+      z-index: 2;
+    }
+    #hud.err { color: rgba(255, 90, 90, 0.7); }
+    #hud.ok { color: rgba(120, 200, 255, 0.5); }
+    #debugPanel {
+      display: none;
+      position: fixed;
+      left: 12px;
+      top: 34px;
+      width: min(560px, calc(100vw - 24px));
+      max-height: 40vh;
+      overflow: auto;
+      padding: 8px 10px;
+      border: 1px solid rgba(180, 220, 255, 0.22);
+      background: rgba(3, 6, 14, 0.62);
+      color: rgba(185, 210, 255, 0.85);
+      font-size: 11px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      z-index: 3;
+      pointer-events: none;
+    }
+    #audioUnlock {
+      position: fixed;
+      right: 12px;
+      top: 10px;
+      z-index: 4;
+      padding: 8px 10px;
+      border: 1px solid rgba(180, 220, 255, 0.35);
+      background: rgba(8, 12, 22, 0.72);
+      color: rgba(190, 220, 255, 0.92);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+    }
+    #audioUnlock.hidden {
+      display: none;
+    }
+    #connectionLog {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      width: min(480px, calc(100vw - 24px));
+      max-height: 34vh;
+      overflow: auto;
+      padding: 9px 10px;
+      border: 1px solid rgba(255, 210, 170, 0.22);
+      background: rgba(10, 8, 10, 0.58);
+      color: rgba(236, 208, 178, 0.9);
+      font-size: 11px;
+      line-height: 1.35;
+      z-index: 3;
+      pointer-events: none;
+      letter-spacing: 0.08em;
+    }
+    #connectionLog .title {
+      color: rgba(255, 205, 150, 0.92);
+      text-transform: uppercase;
+    }
+    #connectionLog .subtitle {
+      color: rgba(220, 190, 165, 0.72);
+      margin-bottom: 6px;
+    }
+    #connectionLog .row {
+      white-space: pre;
+      color: rgba(250, 214, 176, 0.9);
+    }
+    #connectionLog .row.live {
+      color: rgba(255, 226, 170, 0.95);
+    }
+    #connectionLog .row.lost {
+      color: rgba(255, 178, 150, 0.86);
+    }
+    #connectionLog .note {
+      margin-top: 8px;
+      color: rgba(208, 182, 160, 0.58);
+      font-size: 10px;
+      line-height: 1.35;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <canvas id="cv"></canvas>
+  <div id="hud">WS — …</div>
+  <div id="debugPanel">debug init...</div>
+  <div id="audioUnlock" class="hidden">点击启用声音 / Tap To Enable Audio</div>
+  <div id="connectionLog"></div>
+  <script>
+    /**
+     * departure 大屏端 — 对应《departure_td_visual_design.pdf》的 Web 实现草案。
+     * 数据协议与手机端 index.html 的 sendWS 一致；需服务端把各客户端消息广播给所有订阅者，
+     * 大屏才能同时看到多颗卫星。
+     */
+    const WS_URL = "wss://websocket-server-zpgj.onrender.com";
+
+    const glCanvas = document.getElementById("gl");
+    const cv = document.getElementById("cv");
+    const ctx = cv.getContext("2d", { alpha: true });
+    const hud = document.getElementById("hud");
+    const debugPanel = document.getElementById("debugPanel");
+    const audioUnlockEl = document.getElementById("audioUnlock");
+    const connectionLogEl = document.getElementById("connectionLog");
+
+    let W = 0, H = 0, DPR = 1, CX = 0, CY = 0;
+    const earth = { x: 0, y: 0, flashUntil: 0 };
+
+    /** @type {WebGLRenderingContext | null} */
+    let gl = null;
+    /** @type {null | { program: WebGLProgram, u: Record<string, WebGLUniformLocation | null>, buf: WebGLBuffer }} */
+    let stargateGL = null;
+    let smJoyRot = 0;
+    let smJoyDist = 0;
+    let tunnelPullStrength = 0;
+    const comfortCenter = { x: 0, y: 0 };
+    const COMFORT_BASE_RATIO = 0.32;
+    const PHASE_DURATION = { 1: 30000, 2: 60000, 3: 10000, 4: 12000 };
+    let hiddenFields = [];
+    let interLinks = [];
+    let comfortVisualRadius = 0;
+    const LEGACY_SILENCE_TIMEOUT_MS = 4500;
+    let historySeeded = false;
+    const bestContactById = new Map();
+    let contactRecordSeeded = false;
+    const groupEvent = {
+      type: null,
+      until: 0,
+      nextAt: performance.now() + 8000,
+      vecX: 0,
+      vecY: 0,
+      cx: 0,
+      cy: 0,
+      radius: 0,
+    };
+
+    function resetHiddenFields() {
+      const baseR = Math.min(W, H);
+      hiddenFields = [
+        {
+          x: W * 0.24,
+          y: H * 0.34,
+          radius: baseR * 0.16,
+          strength: 0.00014,
+          type: "attract",
+          phase: Math.random() * Math.PI * 2,
+        },
+        {
+          x: W * 0.72,
+          y: H * 0.62,
+          radius: baseR * 0.18,
+          strength: 0.00016,
+          type: "repel",
+          phase: Math.random() * Math.PI * 2,
+        },
+        {
+          x: W * 0.5,
+          y: H * 0.48,
+          radius: baseR * 0.15,
+          strength: 0.0002,
+          type: "chaos",
+          phase: Math.random() * Math.PI * 2,
+        },
+      ];
+    }
+
+    function resize() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      W = window.innerWidth;
+      H = window.innerHeight;
+      glCanvas.width = Math.floor(W * DPR);
+      glCanvas.height = Math.floor(H * DPR);
+      glCanvas.style.width = W + "px";
+      glCanvas.style.height = H + "px";
+      cv.width = Math.floor(W * DPR);
+      cv.height = Math.floor(H * DPR);
+      cv.style.width = W + "px";
+      cv.style.height = H + "px";
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      CX = W * 0.5;
+      CY = H * 0.5;
+      earth.x = CX;
+      earth.y = CY;
+      comfortCenter.x = CX;
+      comfortCenter.y = CY;
+      comfortVisualRadius = Math.min(W, H) * COMFORT_BASE_RATIO * 1.32;
+      if (gl) {
+        gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+      }
+      resetHiddenFields();
+    }
+
+    /** @type {Map<string, object>} */
+    const sats = new Map();
+
+    let ws = null;
+    let wsConnected = false;
+    const debugState = {
+      recvTotal: 0,
+      parsedTotal: 0,
+      parseFailTotal: 0,
+      byType: { join: 0, move: 0, look: 0, end: 0, unknown: 0 },
+      lastRaw: "",
+      lastParsed: "",
+      lastError: "",
+    };
+
+    function setHud(text, cls) {
+      hud.textContent = text;
+      hud.className = cls || "";
+    }
+
+    function setDebugPanel(text) {
+      debugPanel.textContent = text;
+    }
+
+    function updateDebugPanel() {
+      const satList = [...sats.values()];
+      const avgComfort = satList.length
+        ? satList.reduce((acc, s) => acc + (s.comfortFactor == null ? 1 : s.comfortFactor), 0) / satList.length
+        : 1;
+      const sampleComfortRadius = satList.length && satList[0].comfortRadius ? satList[0].comfortRadius.toFixed(1) : "-";
+      const audioState = externalSound.ctx ? externalSound.ctx.state : "not-initialized";
+      setDebugPanel(
+        [
+          `[WS] ${wsConnected ? "CONNECTED" : "DISCONNECTED"}  url=${WS_URL}`,
+          `[AUDIO] started=${externalSound.started ? "yes" : "no"} state=${audioState}`,
+          `[SATS] size=${sats.size}`,
+          `[COMFORT] avg=${avgComfort.toFixed(2)} radius~${sampleComfortRadius}`,
+          `[MSG] recv=${debugState.recvTotal} parsed=${debugState.parsedTotal} parseFail=${debugState.parseFailTotal}`,
+          `[TYPE] join=${debugState.byType.join} move=${debugState.byType.move} look=${debugState.byType.look} end=${debugState.byType.end} unknown=${debugState.byType.unknown}`,
+          `[LAST RAW] ${debugState.lastRaw || "(none)"}`,
+          `[LAST PARSED] ${debugState.lastParsed || "(none)"}`,
+          debugState.lastError ? `[LAST ERROR] ${debugState.lastError}` : "",
+        ].filter(Boolean).join("\n")
+      );
+    }
+
+    function formatLogLine(voyagerNum, name, secs, status) {
+      const tag = `VGR-${String(voyagerNum || 0).padStart(2, "0")}`;
+      const who = (name && name.trim()) ? name.trim() : "——";
+      const s = `${Math.max(0, secs | 0)}s`.padStart(4, " ");
+      return `${tag}   ${who}   ${s}   ${status}`;
+    }
+
+    function seedInitialContactRecords() {
+      if (contactRecordSeeded || bestContactById.size > 0) return;
+      contactRecordSeeded = true;
+      const seeds = [
+        { id: "seed-rec-1", voyagerNum: 3, name: "TRACE-A", bestMs: 3000, lost: true },
+        { id: "seed-rec-2", voyagerNum: 7, name: "TRACE-B", bestMs: 5000, lost: true },
+        { id: "seed-rec-3", voyagerNum: 11, name: "TRACE-C", bestMs: 7000, lost: true },
+      ];
+      for (const rec of seeds) bestContactById.set(rec.id, rec);
+    }
+
+    function renderConnectionLog() {
+      if (!connectionLogEl) return;
+      const top = [...bestContactById.values()]
+        .sort((a, b) => b.bestMs - a.bestMs)
+        .slice(0, 3);
+      const rows = [];
+      rows.push(`<div class="title">Connection Log</div>`);
+      rows.push(`<div class="subtitle">Last Contact Records</div>`);
+      rows.push(`<div class="subtitle">连接记录</div>`);
+      rows.push(`<div class="subtitle">最后接触记录</div>`);
+      for (const rec of top) {
+        rows.push(
+          `<div class="row ${rec.lost ? "lost" : "live"}">`
+          + `${formatLogLine(rec.voyagerNum, rec.name, Math.round((rec.bestMs || 0) / 1000), rec.lost ? "LOST" : "LIVE")}`
+          + `</div>`
+        );
+      }
+      rows.push(`<div class="note">没有记录代表成功。这里只记录延迟的失去。\nNo record indicates success.\nOnly delayed loss.</div>`);
+      connectionLogEl.innerHTML = rows.join("");
+    }
+
+    function updateBestContactRecord(s, forceLost = false) {
+      if (!s || String(s.id || "").startsWith("legacy-")) return;
+      const prev = bestContactById.get(s.id);
+      const bestMs = Math.max(prev?.bestMs || 0, s.haloDwellMs || 0);
+      bestContactById.set(s.id, {
+        id: s.id,
+        voyagerNum: s.voyagerNum || prev?.voyagerNum || 0,
+        name: (s.name && s.name.trim()) ? s.name.trim() : (prev?.name || "——"),
+        bestMs,
+        lost: forceLost || prev?.lost || s.disconnected || s.ended || s.legacy,
+      });
+    }
+
+    function refreshAudioUnlockUI() {
+      if (!audioUnlockEl) return;
+      const needsUnlock = !externalSound.started || !externalSound.ctx || externalSound.ctx.state !== "running";
+      audioUnlockEl.classList.toggle("hidden", !needsUnlock);
+    }
+
+    function parseMsg(raw) {
+      if (typeof raw !== "string") return null;
+      const t = raw.trim();
+      if (!t || t === "pong") return null;
+      try {
+        return JSON.parse(t);
+      } catch {
+        return null;
+      }
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function clamp(v, min, max) {
+      return v < min ? min : v > max ? max : v;
+    }
+
+    function hueFromId(id) {
+      const str = String(id || "");
+      let h = 0;
+      for (let i = 0; i < str.length; i++) {
+        h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+      }
+      // Keep hues in a vivid but not neon range.
+      return ((Math.abs(h) % 260) + 20) % 360;
+    }
+
+    function pullTowardCenter(x, y, strength = tunnelPullStrength) {
+      if (strength <= 0.0001) return { x, y };
+      const dx = x - CX;
+      const dy = y - CY;
+      const pull = strength * 0.3;
+      return {
+        x: x - dx * pull,
+        y: y - dy * pull,
+      };
+    }
+
+    const externalSound = {
+      ctx: null,
+      started: false,
+      master: null,
+      dryGain: null,
+      wetGain: null,
+      compressor: null,
+      distortion: null,
+      droneOscA: null,
+      droneOscB: null,
+      droneGain: null,
+      droneFilter: null,
+      noiseSource: null,
+      noiseGain: null,
+      noiseHiFilter: null,
+      pulseNextAt: 0,
+      voiceNoiseA: null,
+      voiceNoiseB: null,
+      voiceGain: null,
+      voiceFilter: null,
+      cryOsc: null,
+      cryGain: null,
+      cryFilter: null,
+      cryLfo: null,
+      cryLfoGain: null,
+      voiceGateUntil: 0,
+      voiceNextSliceAt: 0,
+      delayNode: null,
+      delayFeedback: null,
+      disconnected: false,
+      peakUntil: 0,
+      silenceUntil: 0,
+      updateHandle: null,
+      latestConnection: 1,
+      latestBurst: 0,
+      latestTunnel: 0,
+      latestNow: 0,
+      latestVoicePresence: 0,
+    };
+
+    function createAudioNoiseBuffer(audioCtx, seconds = 2) {
+      const length = Math.floor(audioCtx.sampleRate * seconds);
+      const buf = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < length; i++) ch[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function makeDistortionCurve(amount) {
+      const k = Math.max(0, amount) * 80;
+      const n = 1024;
+      const curve = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const x = (i * 2) / n - 1;
+        curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x));
+      }
+      return curve;
+    }
+
+    function ensureExternalSoundStarted() {
+      if (externalSound.started) {
+        if (externalSound.ctx && externalSound.ctx.state === "suspended") externalSound.ctx.resume().catch(() => {});
+        refreshAudioUnlockUI();
+        return;
+      }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const audioCtx = new AC();
+
+      const master = audioCtx.createGain();
+      master.gain.value = 0.0001;
+      const compressor = audioCtx.createDynamicsCompressor();
+      compressor.threshold.value = -22;
+      compressor.knee.value = 10;
+      compressor.ratio.value = 2.8;
+      compressor.attack.value = 0.02;
+      compressor.release.value = 0.25;
+
+      const distortion = audioCtx.createWaveShaper();
+      distortion.curve = makeDistortionCurve(0.01);
+      distortion.oversample = "2x";
+
+      const dryGain = audioCtx.createGain();
+      dryGain.gain.value = 1;
+      const wetGain = audioCtx.createGain();
+      wetGain.gain.value = 0.2;
+
+      const delayNode = audioCtx.createDelay(1.0);
+      delayNode.delayTime.value = 0.28;
+      const delayFeedback = audioCtx.createGain();
+      delayFeedback.gain.value = 0.24;
+
+      distortion.connect(dryGain);
+      distortion.connect(delayNode);
+      delayNode.connect(delayFeedback).connect(delayNode);
+      delayNode.connect(wetGain);
+      dryGain.connect(compressor);
+      wetGain.connect(compressor);
+      compressor.connect(master);
+      master.connect(audioCtx.destination);
+
+      const droneOscA = audioCtx.createOscillator();
+      droneOscA.type = "sawtooth";
+      droneOscA.frequency.value = 63;
+      const droneOscB = audioCtx.createOscillator();
+      droneOscB.type = "triangle";
+      droneOscB.frequency.value = 97;
+      const droneFilter = audioCtx.createBiquadFilter();
+      droneFilter.type = "lowpass";
+      droneFilter.frequency.value = 650;
+      const droneGain = audioCtx.createGain();
+      droneGain.gain.value = 0.0001;
+      droneOscA.connect(droneFilter);
+      droneOscB.connect(droneFilter);
+      droneFilter.connect(droneGain).connect(distortion);
+
+      const noiseSource = audioCtx.createBufferSource();
+      noiseSource.buffer = createAudioNoiseBuffer(audioCtx, 2.5);
+      noiseSource.loop = true;
+      const noiseHiFilter = audioCtx.createBiquadFilter();
+      noiseHiFilter.type = "highpass";
+      noiseHiFilter.frequency.value = 2200;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.value = 0.0001;
+      noiseSource.connect(noiseHiFilter).connect(noiseGain).connect(distortion);
+
+      const voiceNoiseA = audioCtx.createBufferSource();
+      voiceNoiseA.buffer = createAudioNoiseBuffer(audioCtx, 1.8);
+      voiceNoiseA.loop = true;
+      const voiceNoiseB = audioCtx.createBufferSource();
+      voiceNoiseB.buffer = createAudioNoiseBuffer(audioCtx, 2.2);
+      voiceNoiseB.loop = true;
+      const voiceFilter = audioCtx.createBiquadFilter();
+      voiceFilter.type = "bandpass";
+      voiceFilter.frequency.value = 540;
+      voiceFilter.Q.value = 1.5;
+      const voiceGain = audioCtx.createGain();
+      voiceGain.gain.value = 0.0001;
+      voiceNoiseA.connect(voiceFilter);
+      voiceNoiseB.connect(voiceFilter);
+      voiceFilter.connect(voiceGain).connect(distortion);
+
+      // Baby-cry-like layer: narrow, unstable formant-like synthetic tone.
+      const cryOsc = audioCtx.createOscillator();
+      cryOsc.type = "sawtooth";
+      cryOsc.frequency.value = 430;
+      const cryFilter = audioCtx.createBiquadFilter();
+      cryFilter.type = "bandpass";
+      cryFilter.frequency.value = 980;
+      cryFilter.Q.value = 3.8;
+      const cryGain = audioCtx.createGain();
+      cryGain.gain.value = 0.0001;
+      const cryLfo = audioCtx.createOscillator();
+      cryLfo.type = "triangle";
+      cryLfo.frequency.value = 0.22;
+      const cryLfoGain = audioCtx.createGain();
+      cryLfoGain.gain.value = 42;
+      cryLfo.connect(cryLfoGain).connect(cryOsc.frequency);
+      cryOsc.connect(cryFilter).connect(cryGain).connect(distortion);
+
+      droneOscA.start();
+      droneOscB.start();
+      noiseSource.start();
+      voiceNoiseA.start();
+      voiceNoiseB.start();
+      cryOsc.start();
+      cryLfo.start();
+      audioCtx.resume().catch(() => {});
+
+      externalSound.ctx = audioCtx;
+      externalSound.started = true;
+      externalSound.master = master;
+      externalSound.dryGain = dryGain;
+      externalSound.wetGain = wetGain;
+      externalSound.compressor = compressor;
+      externalSound.distortion = distortion;
+      externalSound.droneOscA = droneOscA;
+      externalSound.droneOscB = droneOscB;
+      externalSound.droneGain = droneGain;
+      externalSound.droneFilter = droneFilter;
+      externalSound.noiseSource = noiseSource;
+      externalSound.noiseGain = noiseGain;
+      externalSound.noiseHiFilter = noiseHiFilter;
+      externalSound.voiceNoiseA = voiceNoiseA;
+      externalSound.voiceNoiseB = voiceNoiseB;
+      externalSound.voiceGain = voiceGain;
+      externalSound.voiceFilter = voiceFilter;
+      externalSound.cryOsc = cryOsc;
+      externalSound.cryGain = cryGain;
+      externalSound.cryFilter = cryFilter;
+      externalSound.cryLfo = cryLfo;
+      externalSound.cryLfoGain = cryLfoGain;
+      externalSound.delayNode = delayNode;
+      externalSound.delayFeedback = delayFeedback;
+      externalSound.pulseNextAt = performance.now() + 400;
+      externalSound.voiceNextSliceAt = performance.now() + 300;
+      if (!externalSound.updateHandle) externalSound.updateHandle = requestAnimationFrame(updateExternalSoundFrame);
+      refreshAudioUnlockUI();
+    }
+
+    function playExternalPulse(connection) {
+      if (!externalSound.started || !externalSound.ctx || !externalSound.distortion) return;
+      const audioCtx = externalSound.ctx;
+      const now = audioCtx.currentTime;
+      const conn = clamp(connection, 0, 1);
+      if (conn < 0.35 && Math.random() < (0.35 - conn) * 1.2) return;
+      const osc = audioCtx.createOscillator();
+      osc.type = Math.random() < 0.6 ? "square" : "triangle";
+      osc.frequency.setValueAtTime(900 + Math.random() * 900, now);
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(1400 + Math.random() * 1300, now);
+      bp.Q.value = 7;
+      const g = audioCtx.createGain();
+      const dur = 0.012 + Math.random() * 0.028;
+      const amp = 0.003 + conn * 0.004;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(amp, now + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(bp).connect(g).connect(externalSound.distortion);
+      osc.start(now);
+      osc.stop(now + dur + 0.01);
+    }
+
+    function updateExternalSound(connection, burstStrength, tunnelStrength, nowPerf, voicePresence = 0) {
+      externalSound.latestConnection = clamp(connection, 0, 1);
+      externalSound.latestBurst = clamp(burstStrength, 0, 1);
+      externalSound.latestTunnel = clamp(tunnelStrength, 0, 1);
+      externalSound.latestNow = nowPerf;
+      externalSound.latestVoicePresence = clamp(voicePresence, 0, 1);
+    }
+
+    function updateExternalSoundFrame() {
+      if (!externalSound.started || !externalSound.ctx) return;
+      const audioCtx = externalSound.ctx;
+      if (audioCtx.state !== "running") {
+        refreshAudioUnlockUI();
+      }
+      const nowPerf = externalSound.latestNow || performance.now();
+      const conn = externalSound.latestConnection;
+      const anxiety = clamp(1 - conn, 0, 1);
+      const voicePresence = externalSound.latestVoicePresence;
+      const inSilence = nowPerf < externalSound.silenceUntil;
+
+      if (!externalSound.disconnected && conn <= 0.04) {
+        externalSound.disconnected = true;
+        externalSound.peakUntil = nowPerf + 180;
+        externalSound.silenceUntil = nowPerf + 680;
+      }
+      if (conn > 0.08) externalSound.disconnected = false;
+
+      const peak = nowPerf < externalSound.peakUntil;
+      if (!inSilence && nowPerf >= externalSound.pulseNextAt) {
+        playExternalPulse(conn);
+        const bpm = peak ? 200 : 44 + anxiety * 46;
+        const base = 60000 / bpm;
+        const jitter = (Math.random() * 2 - 1) * (30 + anxiety * 90);
+        externalSound.pulseNextAt = nowPerf + Math.max(210, base + jitter);
+      }
+
+      if (nowPerf >= externalSound.voiceNextSliceAt) {
+        const near = anxiety;
+        const sliceLen = 90 + Math.random() * 240;
+        externalSound.voiceGateUntil = nowPerf + sliceLen;
+        externalSound.voiceNextSliceAt = nowPerf + 140 + Math.random() * (420 - near * 180);
+      }
+      const voiceGate = nowPerf < externalSound.voiceGateUntil ? 1 : 0;
+
+      const droneTarget = inSilence ? 0.0001 : (0.02 + (1 - anxiety * 0.4) * 0.045);
+      const noiseTarget = inSilence ? 0.0001 : (Math.pow(anxiety, 1.5) * 0.11 + (peak ? 0.09 : 0));
+      const voiceBed = 0.011 + anxiety * 0.02;
+      const voiceBurst = voiceGate * (0.01 + anxiety * 0.026);
+      const voiceTarget = inSilence ? 0.0001 : voicePresence * (voiceBed + voiceBurst);
+      const cryTarget = inSilence ? 0.0001 : voicePresence * (0.006 + anxiety * 0.026 + voiceGate * 0.009);
+      const masterTarget = inSilence ? 0.0001 : (0.18 + anxiety * 0.5 + (peak ? 0.18 : 0));
+
+      // Distance: high connection = far (more wet reverb), low connection = near/dry.
+      const wetTarget = inSilence ? 0.02 : lerp(0.34, 0.06, anxiety);
+      const dryTarget = inSilence ? 0.1 : lerp(0.72, 1, anxiety);
+
+      externalSound.droneOscA.frequency.linearRampToValueAtTime(lerp(62, 76, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.droneOscB.frequency.linearRampToValueAtTime(lerp(96, 122, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.droneFilter.frequency.linearRampToValueAtTime(lerp(620, 380, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.droneGain.gain.linearRampToValueAtTime(droneTarget, audioCtx.currentTime + 0.08);
+
+      externalSound.noiseHiFilter.frequency.linearRampToValueAtTime(lerp(2600, 1500 + anxiety * 3000, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.noiseGain.gain.linearRampToValueAtTime(noiseTarget, audioCtx.currentTime + 0.08);
+
+      externalSound.voiceFilter.frequency.linearRampToValueAtTime(lerp(460, 900, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.voiceFilter.Q.linearRampToValueAtTime(lerp(1.5, 4.2, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.voiceGain.gain.linearRampToValueAtTime(voiceTarget, audioCtx.currentTime + 0.05);
+      externalSound.cryOsc.frequency.linearRampToValueAtTime(lerp(390, 620, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.cryFilter.frequency.linearRampToValueAtTime(lerp(820, 1550, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.cryFilter.Q.linearRampToValueAtTime(lerp(3.4, 8.5, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.cryLfo.frequency.linearRampToValueAtTime(lerp(0.18, 0.72, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.cryLfoGain.gain.linearRampToValueAtTime(lerp(28, 95, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.cryGain.gain.linearRampToValueAtTime(cryTarget, audioCtx.currentTime + 0.05);
+
+      const visualDist = clamp(externalSound.latestBurst * 0.7 + externalSound.latestTunnel * 0.8, 0, 1);
+      externalSound.distortion.curve = makeDistortionCurve(0.02 + visualDist * 0.45);
+      externalSound.delayNode.delayTime.linearRampToValueAtTime(lerp(0.32, 0.08, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.delayFeedback.gain.linearRampToValueAtTime(lerp(0.22, 0.06, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.wetGain.gain.linearRampToValueAtTime(wetTarget, audioCtx.currentTime + 0.08);
+      externalSound.dryGain.gain.linearRampToValueAtTime(dryTarget, audioCtx.currentTime + 0.08);
+
+      externalSound.compressor.threshold.linearRampToValueAtTime(lerp(-20, -32, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.compressor.ratio.linearRampToValueAtTime(lerp(2.8, 8, anxiety), audioCtx.currentTime + 0.08);
+      externalSound.master.gain.linearRampToValueAtTime(masterTarget, audioCtx.currentTime + 0.08);
+
+      externalSound.updateHandle = requestAnimationFrame(updateExternalSoundFrame);
+    }
+
+    function ensureSat(id) {
+      if (!sats.has(id)) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.min(W, H) * (0.12 + Math.random() * 0.08);
+        sats.set(id, {
+          id,
+          name: "",
+          voyagerNum: 2,
+          phase: 1,
+          x: CX + Math.cos(a) * r,
+          y: CY + Math.sin(a) * r,
+          vx: 0,
+          vy: 0,
+          inputQueue: [],
+          appliedJoyX: 0,
+          appliedJoyY: 0,
+          trail: [],
+          flashUntil: 0,
+          rayAngle: 0,
+          lookFrozen: false,
+          ended: false,
+          legacy: false,
+          phase2EnterT: null,
+          lastMoveT: 0,
+          glitchPhase: 0,
+          connection: 1.0,
+          prevConnection: 1.0,
+          comfortFactor: 1.0,
+          comfortRadius: Math.min(W, H) * COMFORT_BASE_RATIO,
+          controlJoyX: 0,
+          controlJoyY: 0,
+          targetJoyX: 0,
+          targetJoyY: 0,
+          colorHue: hueFromId(id),
+          phaseEnteredAt: performance.now(),
+          disconnected: false,
+          fadeOut: false,
+          fadeAlpha: 1,
+          instability: 0,
+          haloInside: true,
+          lastHaloReportAt: 0,
+          linkBoost: 0,
+          haloDwellMs: 0,
+          haloDwellLastAt: 0,
+          lostLogged: false,
+          historical: false,
+          lostBlinkUntil: 0,
+          spawnTime: 0,
+          spawnDurationMs: 0,
+        });
+      }
+      return sats.get(id);
+    }
+
+    function seedHistorySatellites() {
+      if (historySeeded || !W || !H) return;
+      historySeeded = true;
+      const count = 5 + Math.floor(Math.random() * 6); // 5..10
+      for (let i = 0; i < count; i++) {
+        const id = `legacy-${i}-${Math.floor(Math.random() * 10000)}`;
+        const s = ensureSat(id);
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.min(W, H) * (0.22 + Math.random() * 0.32);
+        s.name = "TRACE";
+        s.voyagerNum = 10 + Math.floor(Math.random() * 90);
+        s.phase = 4;
+        s.phaseEnteredAt = performance.now() - (2000 + Math.random() * 30000);
+        s.x = CX + Math.cos(a) * r;
+        s.y = CY + Math.sin(a) * r;
+        s.vx = (Math.random() * 2 - 1) * 0.28;
+        s.vy = (Math.random() * 2 - 1) * 0.28;
+        s.inputQueue = [];
+        s.appliedJoyX = 0;
+        s.appliedJoyY = 0;
+        s.controlJoyX = 0;
+        s.controlJoyY = 0;
+        s.targetJoyX = 0;
+        s.targetJoyY = 0;
+        s.trail = [];
+        s.connection = 0.22 + Math.random() * 0.42;
+        s.prevConnection = s.connection;
+        s.comfortFactor = 0.18 + Math.random() * 0.42;
+        s.comfortRadius = Math.min(W, H) * COMFORT_BASE_RATIO * (0.28 + Math.random() * 0.22);
+        s.flashUntil = 0;
+        s.rayAngle = Math.random() * Math.PI * 2;
+        s.lookFrozen = true;
+        s.ended = true;
+        s.legacy = true;
+        s.phase2EnterT = null;
+        s.lastMoveT = 0;
+        s.glitchPhase = 0;
+        s.disconnected = true;
+        s.fadeOut = false;
+        s.fadeAlpha = 1;
+        s.instability = 0.1 + Math.random() * 0.35;
+        s.haloInside = false;
+        s.lastHaloReportAt = 0;
+        s.linkBoost = 0;
+        s.haloDwellMs = 0;
+        s.haloDwellLastAt = performance.now();
+        s.lostLogged = true;
+        s.historical = true;
+        s.lostBlinkUntil = 0;
+      }
+    }
+
+    function archiveLostRecord(s) {
+      if (!s || s.lostLogged) return;
+      s.lostLogged = true;
+      updateBestContactRecord(s, true);
+    }
+
+    function markLegacyOnNewJoin() {
+      for (const s of sats.values()) {
+        if (s.ended || s.phase >= 4) s.legacy = true;
+      }
+    }
+
+    function onData(d) {
+      if (!d || typeof d !== "object") return;
+      const id = d.id;
+      if (!id) return;
+      if (typeof d.type === "string" && debugState.byType[d.type] != null) debugState.byType[d.type]++;
+      else debugState.byType.unknown++;
+      debugState.lastParsed = JSON.stringify(d);
+
+      if (d.type === "join") {
+        markLegacyOnNewJoin();
+        const s = ensureSat(id);
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.min(W, H) * (0.12 + Math.random() * 0.08);
+        s.name = String(d.name || "——");
+        s.voyagerNum = Number(d.voyagerNum) || 2;
+        s.phase = 1;
+        s.phaseEnteredAt = performance.now();
+        s.x = CX + Math.cos(a) * r;
+        s.y = CY + Math.sin(a) * r;
+        s.vx = 0;
+        s.vy = 0;
+        s.inputQueue = [];
+        s.appliedJoyX = 0;
+        s.appliedJoyY = 0;
+        s.controlJoyX = 0;
+        s.controlJoyY = 0;
+        s.targetJoyX = 0;
+        s.targetJoyY = 0;
+        s.trail = [];
+        s.connection = 1.0;
+        s.prevConnection = 1.0;
+        s.comfortFactor = 1.0;
+        s.comfortRadius = Math.min(W, H) * COMFORT_BASE_RATIO;
+        s.disconnected = false;
+        s.fadeOut = false;
+        s.fadeAlpha = 1;
+        s.flashUntil = 0;
+        s.rayAngle = 0;
+        s.legacy = false;
+        s.ended = false;
+        s.lookFrozen = false;
+        s.phase2EnterT = null;
+        s.glitchPhase = 0;
+        s.instability = 0;
+        s.haloInside = true;
+        s.lastHaloReportAt = 0;
+        s.linkBoost = 0;
+        s.lastMoveT = performance.now();
+        s.haloDwellMs = 0;
+        s.haloDwellLastAt = performance.now();
+        s.lostLogged = false;
+        s.historical = false;
+        s.lostBlinkUntil = 0;
+        s.spawnTime = performance.now();
+        s.spawnDurationMs = 520 + Math.random() * 180;
+        return;
+      }
+
+      if (d.type === "look") {
+        const s = ensureSat(id);
+        s.phase = 3;
+        s.phaseEnteredAt = performance.now();
+        s.lookFrozen = false;
+        s.flashUntil = performance.now() + 550;
+        s.rayAngle = Math.random() * Math.PI * 2;
+        return;
+      }
+
+      if (d.type === "end") {
+        const s = ensureSat(id);
+        s.phase = 4;
+        s.phaseEnteredAt = performance.now();
+        s.ended = true;
+        s.lookFrozen = true;
+        s.appliedJoyX = 0;
+        s.appliedJoyY = 0;
+        s.controlJoyX = 0;
+        s.controlJoyY = 0;
+        s.targetJoyX = 0;
+        s.targetJoyY = 0;
+        s.inputQueue = [];
+        archiveLostRecord(s);
+        return;
+      }
+
+      if (d.type === "move") {
+        const s = ensureSat(id);
+        const rawDelay = Math.max(0, Number(d.delay) || 0);
+        const phase = Number(d.phase) || 1;
+        // Silence timeout should not permanently kill control; new input revives active phases.
+        if ((s.lookFrozen || s.ended || s.legacy) && phase <= 2) {
+          reviveSatFromInput(s);
+        }
+        if (s.lookFrozen || s.ended) return;
+        const delayCap = phase <= 1 ? 40 : phase === 2 ? 180 : 320;
+        const delay = Math.min(rawDelay, delayCap);
+        if (phase === 2 && s.phase !== 2) {
+          s.phase2EnterT = performance.now();
+        }
+        if (phase !== s.phase) {
+          s.phaseEnteredAt = performance.now();
+        }
+        s.phase = phase;
+        s.inputQueue.push({
+          joyX: Number(d.joyX) || 0,
+          joyY: Number(d.joyY) || 0,
+          applyAt: performance.now() + delay,
+        });
+        if (s.inputQueue.length > 6) {
+          s.inputQueue.splice(0, s.inputQueue.length - 6);
+        }
+        s.lastMoveT = performance.now();
+      }
+    }
+
+    function markLegacyFromDisconnect(s, now) {
+      s.legacy = true;
+      s.ended = true;
+      s.lookFrozen = true;
+      s.appliedJoyX = 0;
+      s.appliedJoyY = 0;
+      s.controlJoyX = 0;
+      s.controlJoyY = 0;
+      s.targetJoyX = 0;
+      s.targetJoyY = 0;
+      s.inputQueue = [];
+      s.flashUntil = now + 260;
+      s.disconnected = true;
+      archiveLostRecord(s);
+    }
+
+    function reviveSatFromInput(s) {
+      if (!s) return;
+      s.legacy = false;
+      s.ended = false;
+      s.lookFrozen = false;
+      s.disconnected = false;
+      s.flashUntil = 0;
+      s.lastMoveT = performance.now();
+      if (!Array.isArray(s.inputQueue)) s.inputQueue = [];
+    }
+
+    function connectWS() {
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+      setHud("WS — 连接中…", "");
+      try {
+        ws = new WebSocket(WS_URL);
+      } catch (e) {
+        setHud("WS — 失败", "err");
+        setTimeout(connectWS, 3000);
+        return;
+      }
+      ws.addEventListener("open", () => {
+        wsConnected = true;
+        setHud("WS — 已连接", "ok");
+        ensureExternalSoundStarted();
+        try { ws.send("pong"); } catch (_) {}
+      });
+      ws.addEventListener("close", () => {
+        wsConnected = false;
+        setHud("WS — 断开，重试中…", "err");
+        setTimeout(connectWS, 2000);
+      });
+      ws.addEventListener("error", () => {
+        wsConnected = false;
+      });
+      ws.addEventListener("message", (ev) => {
+        ensureExternalSoundStarted();
+        debugState.recvTotal++;
+        debugState.lastRaw = typeof ev.data === "string" ? ev.data.slice(0, 360) : `[non-string:${typeof ev.data}]`;
+        try {
+          const d = parseMsg(ev.data);
+          if (d) {
+            debugState.parsedTotal++;
+            onData(d);
+          } else if (typeof ev.data === "string" && ev.data.trim() && ev.data.trim() !== "pong") {
+            debugState.parseFailTotal++;
+          }
+        } catch (e) {
+          debugState.parseFailTotal++;
+          debugState.lastError = String(e && e.message ? e.message : e);
+        }
+      });
+    }
+
+    function reportHaloState(id, inside) {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(JSON.stringify({ type: "halo", id, inside: !!inside }));
+      } catch (_) {
+        // ignore transient send errors
+      }
+    }
+
+    connectWS();
+    refreshAudioUnlockUI();
+
+    function compileShader(type, src) {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.warn(gl.getShaderInfoLog(sh));
+        gl.deleteShader(sh);
+        return null;
+      }
+      return sh;
+    }
+
+    function initStargateGL() {
+      gl =
+        glCanvas.getContext("webgl", {
+          alpha: false,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          powerPreference: "high-performance",
+        }) || glCanvas.getContext("experimental-webgl");
+      if (!gl) return;
+
+      const vs = `
+        attribute vec2 a_pos;
+        varying vec2 v_uv;
+        void main() {
+          v_uv = a_pos * 0.5 + 0.5;
+          gl_Position = vec4(a_pos, 0.0, 1.0);
+        }
+      `;
+      const fs = `
+        precision highp float;
+        varying vec2 v_uv;
+        uniform vec2 u_res;
+        uniform float u_time;
+        uniform float u_intensity;
+        uniform float u_rot;
+        uniform float u_distort;
+        uniform float u_warm;
+        uniform float u_speed;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float n2(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+            mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+            f.y
+          );
+        }
+
+        void main() {
+          vec2 uv0 = v_uv * 2.0 - 1.0;
+          uv0.x *= u_res.x / u_res.y;
+          float r0 = length(uv0);
+          float barrel = 1.0 + u_distort * 0.55 * r0 * r0;
+          vec2 uv = uv0 * barrel;
+
+          float ang = atan(uv.y, uv.x);
+          float rad = length(uv);
+          ang += u_rot * (0.2 + 0.85 * smoothstep(0.04, 0.65, rad));
+
+          float z = 1.0 / max(rad, 0.002);
+          float scroll = u_time * 0.00028 * u_speed;
+
+          float bands = sin(ang * 22.0 + z * 0.95 + scroll * 2.2);
+          float bands2 = sin(ang * 44.0 - z * 1.15 - scroll * 1.8);
+          float ribs = sin(uv0.x * 38.0 + z * 1.4 + scroll * 2.8);
+          float grain = n2(vec2(ang * 6.0, z * 0.35) + scroll * 0.5) * 2.0 - 1.0;
+
+          float pat = bands * 0.52 + bands2 * 0.28 + ribs * 0.18 + grain * 0.14;
+
+          float side = smoothstep(-0.18, 0.18, uv0.x);
+          vec3 colL = mix(vec3(0.05, 0.85, 0.28), vec3(1.0, 0.42, 0.08), 0.55 + 0.45 * sin(ang * 2.1 + scroll));
+          vec3 colR = mix(vec3(0.45, 0.08, 0.95), vec3(0.15, 0.55, 1.0), 0.5 + 0.5 * cos(ang * 1.9 - scroll * 1.3));
+          vec3 sideCol = mix(colL, colR, side);
+
+          vec3 coolShift = mix(sideCol, vec3(0.35, 0.75, 1.0), 0.22);
+          vec3 warmShift = mix(sideCol, vec3(1.0, 0.55, 0.2), 0.18);
+          vec3 tunnelCol = mix(coolShift, warmShift, u_warm);
+
+          tunnelCol *= 0.28 + 0.72 * (0.25 + 0.75 * abs(pat));
+          tunnelCol *= smoothstep(0.06, 0.62, rad);
+
+          float core = exp(-rad * 4.2);
+          vec3 hot = vec3(1.0, 0.92, 0.85) * 1.1;
+          vec3 redCore = vec3(1.0, 0.12, 0.04);
+          tunnelCol = mix(tunnelCol, mix(hot, redCore, 0.35), core * 0.95);
+
+          float vig = smoothstep(0.0, 0.15, rad) * smoothstep(1.35, 0.45, rad);
+          tunnelCol *= 0.35 + 0.65 * vig;
+
+          float a = u_intensity * (0.15 + 0.85 * smoothstep(0.03, 0.2, rad));
+          a = min(1.0, a * (0.4 + 0.6 * abs(pat)) + core * u_intensity * 1.1);
+
+          vec3 bg = mix(vec3(0.015, 0.018, 0.04), vec3(0.035, 0.022, 0.018), u_warm);
+          vec3 outc = mix(bg, tunnelCol, clamp(a, 0.0, 1.0));
+          gl_FragColor = vec4(outc, 1.0);
+        }
+      `;
+
+      const vsh = compileShader(gl.VERTEX_SHADER, vs);
+      const fsh = compileShader(gl.FRAGMENT_SHADER, fs);
+      if (!vsh || !fsh) return;
+
+      const program = gl.createProgram();
+      gl.attachShader(program, vsh);
+      gl.attachShader(program, fsh);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.warn(gl.getProgramInfoLog(program));
+        return;
+      }
+
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+        gl.STATIC_DRAW
+      );
+
+      const a_pos = gl.getAttribLocation(program, "a_pos");
+      stargateGL = {
+        program,
+        buf,
+        u: {
+          res: gl.getUniformLocation(program, "u_res"),
+          time: gl.getUniformLocation(program, "u_time"),
+          intensity: gl.getUniformLocation(program, "u_intensity"),
+          rot: gl.getUniformLocation(program, "u_rot"),
+          distort: gl.getUniformLocation(program, "u_distort"),
+          warm: gl.getUniformLocation(program, "u_warm"),
+          speed: gl.getUniformLocation(program, "u_speed"),
+        },
+        a_pos,
+      };
+      gl.deleteShader(vsh);
+      gl.deleteShader(fsh);
+    }
+
+    function renderStargateGL(t, blend, gateVis) {
+      if (!gl || !stargateGL) return;
+      const pr = stargateGL.program;
+      gl.useProgram(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, stargateGL.buf);
+      gl.enableVertexAttribArray(stargateGL.a_pos);
+      gl.vertexAttribPointer(stargateGL.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+      const warm = blend.warm;
+      const speed = 0.75 + blend.cold * 0.55 + gateVis * 0.35;
+
+      gl.uniform2f(stargateGL.u.res, glCanvas.width, glCanvas.height);
+      gl.uniform1f(stargateGL.u.time, t);
+      gl.uniform1f(stargateGL.u.intensity, gateVis);
+      gl.uniform1f(stargateGL.u.rot, smJoyRot);
+      gl.uniform1f(stargateGL.u.distort, smJoyDist);
+      gl.uniform1f(stargateGL.u.warm, warm);
+      gl.uniform1f(stargateGL.u.speed, speed);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+    function updateJoystickDrive(dt) {
+      let sx = 0;
+      let sy = 0;
+      let c = 0;
+      for (const s of sats.values()) {
+        if (s.lookFrozen || s.ended) continue;
+        if (s.phase <= 2) {
+          sx += s.appliedJoyX;
+          sy += s.appliedJoyY;
+          c++;
+        }
+      }
+      if (c > 0) {
+        sx /= c;
+        sy /= c;
+      }
+      const idleT = performance.now();
+      const targetRot = c > 0 ? sx * 0.42 : Math.sin(idleT * 0.00035) * 0.035;
+      const targetDist = c > 0 ? Math.min(1, Math.hypot(sx, sy)) * 0.62 : 0;
+      const k = 1 - Math.pow(0.88, dt / 16);
+      smJoyRot += (targetRot - smJoyRot) * k;
+      smJoyDist += (targetDist - smJoyDist) * k;
+    }
+
+    window.addEventListener("resize", resize);
+    initStargateGL();
+    resize();
+    seedInitialContactRecords();
+    seedHistorySatellites();
+
+    // —— 星场（初始可见 + 轻微呼吸） ——
+    const stars = Array.from({ length: 240 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      s: 0.8 + Math.random() * 1.8,
+      a: 0.14 + Math.random() * 0.34,
+      ph: Math.random() * Math.PI * 2,
+    }));
+    const farStars = Array.from({ length: 180 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      s: 0.5 + Math.random() * 1.0,
+      a: 0.05 + Math.random() * 0.14,
+      ph: Math.random() * Math.PI * 2,
+    }));
+
+    function drawStars(t) {
+      for (const st of farStars) {
+        const tw = 0.55 + 0.45 * Math.sin(t * 0.00065 + st.ph);
+        const px = st.x * W;
+        const py = st.y * H;
+        ctx.fillStyle = `rgba(190,210,255,${st.a * tw})`;
+        ctx.fillRect(px, py, st.s, st.s);
+      }
+      for (const st of stars) {
+        const tw = 0.5 + 0.5 * Math.sin(t * 0.001 + st.ph);
+        const px = st.x * W;
+        const py = st.y * H;
+        ctx.fillStyle = `rgba(255,255,255,${st.a * tw})`;
+        ctx.fillRect(px, py, st.s, st.s);
+      }
+    }
+
+    function globalPhaseBlend() {
+      let n = 0;
+      let w1 = 0, w2 = 0, w34 = 0;
+      let connectionSum = 0;
+      for (const s of sats.values()) {
+        if (s.legacy && s.phase >= 4) continue;
+        n++;
+        if (s.phase <= 1) w1++;
+        else if (s.phase === 2) w2++;
+        else w34++;
+        connectionSum += s.connection == null ? 1 : s.connection;
+      }
+      if (!n) return { warm: 1, cold: 0, anyP2: false, phase2plus: false, count: 0, avgConnection: 1 };
+      const avgConnection = connectionSum / n;
+      const coldBias = 1 - avgConnection;
+      return {
+        warm: Math.max(0, (w1 / n) * (0.7 + avgConnection * 0.3)),
+        cold: Math.min(1, (w2 + w34) / n + coldBias * 0.4),
+        anyP2: w2 > 0,
+        phase2plus: (w2 + w34) > 0,
+        count: n,
+        avgConnection,
+      };
+    }
+
+    let gateRamp = 0;
+    let gateFadeStart = null;
+    let pulseT0 = 0;
+
+    function updateGate(dt, blend, t) {
+      const activeGate = blend.anyP2 || blend.warm < 0.999;
+      if (blend.anyP2) {
+        gateFadeStart = null;
+        gateRamp = Math.min(1, gateRamp + dt / 12000);
+      } else if (blend.count === 0 || blend.cold > 0.99) {
+        if (gateRamp > 0.02 && !gateFadeStart) gateFadeStart = performance.now();
+        if (gateFadeStart) {
+          const elapsed = performance.now() - gateFadeStart;
+          gateRamp = Math.max(0, gateRamp - dt / 45000);
+          if (elapsed > 50000) gateRamp = 0;
+        }
+      } else {
+        gateFadeStart = null;
+      }
+
+      if (t - pulseT0 > 20000 + Math.random() * 5000) pulseT0 = t;
+    }
+
+    function getPhaseProgress(s, now) {
+      const dur = PHASE_DURATION[s.phase] || 10000;
+      return clamp((now - (s.phaseEnteredAt || now)) / dur, 0, 1);
+    }
+
+    function getComfortRadiusForSat(s, now) {
+      const base = Math.min(W, H) * COMFORT_BASE_RATIO;
+      const p = getPhaseProgress(s, now);
+      // Explicit phase progression: large in P1, then shrinking by phase.
+      if (s.phase <= 1) return base * lerp(1.34, 1.2, p);
+      if (s.phase === 2) return base * lerp(1.02, 0.8, p);
+      if (s.phase === 3) return base * lerp(0.62, 0.46, p);
+      return base * lerp(0.34, 0.2, p);
+    }
+
+    function getInevitableDecay(s, now) {
+      const p = getPhaseProgress(s, now);
+      if (s.phase <= 1) return lerp(1, 0.93, p);
+      if (s.phase === 2) return lerp(0.9, 0.58, p);
+      if (s.phase === 3) return lerp(0.56, 0.3, p);
+      return lerp(0.28, 0.14, p);
+    }
+
+    function corruptText(str, level) {
+      if (level <= 0) return str;
+      const out = [];
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === " " || ch === "/" || ch === "-") {
+          out.push(ch);
+          continue;
+        }
+        out.push(Math.random() < level * 0.45 ? "▓" : ch);
+      }
+      return out.join("");
+    }
+
+    function labelFor(s) {
+      if (s.legacy && !s.name) return "";
+      const base = `VGR-${String(s.voyagerNum).padStart(2, "0")} // ${s.name || "——"}`;
+      if (s.historical) {
+        const now = performance.now();
+        if (now > (s.lostBlinkUntil || 0) && Math.random() < 0.0028) {
+          s.lostBlinkUntil = now + 600 + Math.random() * 1100;
+        }
+        const showLost = now < (s.lostBlinkUntil || 0);
+        const histBase = showLost ? `${base} // LOST` : base;
+        return corruptText(histBase, showLost ? 0.18 : 0.08);
+      }
+      if (s.phase >= 4) {
+        const pulse = 0.08 + 0.12 * (0.5 + 0.5 * Math.sin(performance.now() * 0.0012 + (s.voyagerNum || 0)));
+        return corruptText(base, pulse);
+      }
+      if (s.phase >= 3) return s.phase === 3 ? corruptText(base, 0.85) : "";
+      if (s.phase === 2) {
+        const age = s.phase2EnterT ? (performance.now() - s.phase2EnterT) / 8000 : 0;
+        return corruptText(base, Math.min(0.9, 0.25 + age));
+      }
+      return base;
+    }
+
+    function drawTrail(s) {
+      const pts = s.trail;
+      if (pts.length < 2) return;
+      if (s.phase >= 4 && !s.historical) return;
+
+      ctx.save();
+      if (s.phase === 2) {
+        ctx.setLineDash([6 + s.glitchPhase * 2, 10 + s.glitchPhase * 4]);
+        ctx.globalAlpha = 0.45;
+      } else {
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 0.65;
+      }
+
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const age = i / pts.length;
+        const phaseFade = s.historical ? 0.55 : s.phase <= 1 ? 1 : s.phase === 2 ? 0.8 : 0.62;
+        const connFade = 0.55 + s.connection * 0.45;
+        const hue = Number.isFinite(s.colorHue) ? s.colorHue : 34;
+        ctx.strokeStyle = `hsla(${hue}, 88%, 66%, ${(0.12 + age * 0.32) * phaseFade * connFade})`;
+        ctx.lineWidth = (s.historical ? 1.2 : s.phase <= 1 ? 2.2 : 1.5) * connFade;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawEarth(t, blend) {
+      const pulse = 0.92 + 0.08 * Math.sin(t * 0.0014);
+      const flashT = earth.flashUntil > t ? (earth.flashUntil - t) / 240 : 0;
+      const dimPulse = flashT > 0 ? lerp(0.35, 1, 1 - flashT) : 1;
+      const glow = lerp(28, 14, 1 - blend.avgConnection) * pulse * dimPulse;
+      const alpha = lerp(0.5, 0.18, 1 - blend.avgConnection) * dimPulse;
+      const active = [...sats.values()].filter((s) => !s.legacy && s.phase <= 4);
+      const activeCount = active.length;
+      const avgComfortRadius = activeCount
+        ? active.reduce((acc, s) => acc + (s.comfortRadius || 0), 0) / activeCount
+        : Math.min(W, H) * COMFORT_BASE_RATIO * 1.28;
+      // Halo body follows phase-driven comfort radius and shrinks progressively with phases.
+      comfortVisualRadius = comfortVisualRadius > 0
+        ? lerp(comfortVisualRadius, avgComfortRadius, 0.08)
+        : avgComfortRadius;
+      // Multi-user "breathing": only when >1 active satellites are online.
+      const breathAmp = activeCount > 1 ? Math.min(0.09, 0.03 + (activeCount - 1) * 0.015) : 0;
+      const breathScale = 1 + Math.sin(t * 0.0022) * breathAmp;
+      const comfortR = comfortVisualRadius * breathScale;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const g = ctx.createRadialGradient(earth.x, earth.y, 0, earth.x, earth.y, glow);
+      g.addColorStop(0, `rgba(255, 220, 180, ${alpha})`);
+      g.addColorStop(0.35, `rgba(120, 170, 255, ${alpha * 0.55})`);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(earth.x, earth.y, glow, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = `rgba(255, 245, 230, ${(0.35 + blend.avgConnection * 0.25) * dimPulse})`;
+      ctx.beginPath();
+      ctx.arc(earth.x, earth.y, 2.6 + pulse * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Halo body (main visual): this is the actual comfort field.
+      const cg = ctx.createRadialGradient(comfortCenter.x, comfortCenter.y, 0, comfortCenter.x, comfortCenter.y, comfortR);
+      const haloCoreAlpha = (0.05 + blend.avgConnection * 0.07) * (1 + breathAmp * 1.2);
+      const haloMidAlpha = (0.018 + blend.avgConnection * 0.03) * (1 + breathAmp * 0.8);
+      cg.addColorStop(0, `rgba(180, 220, 255, ${haloCoreAlpha})`);
+      cg.addColorStop(0.55, `rgba(160, 205, 255, ${haloMidAlpha})`);
+      cg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(comfortCenter.x, comfortCenter.y, comfortR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Outer guide line stays very subtle so the halo body remains the focus.
+      ctx.strokeStyle = `rgba(130, 200, 255, ${0.03 + blend.avgConnection * 0.04})`;
+      ctx.lineWidth = 0.8;
+      ctx.setLineDash([5, 9]);
+      ctx.lineDashOffset = -t * 0.01;
+      ctx.beginPath();
+      ctx.arc(comfortCenter.x, comfortCenter.y, comfortR * 0.98, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    function drawConnection(s, t) {
+      if ((s.phase < 4 && s.connection <= 0.01) || s.fadeAlpha <= 0.02) return;
+
+      ctx.save();
+      const stability = 0.4 + s.comfortFactor * 0.6;
+      ctx.globalAlpha = s.connection * 0.8 * s.fadeAlpha * stability;
+      const phaseDim = s.phase <= 1 ? 1 : s.phase === 2 ? 0.82 : 0.64;
+      const hue = Number.isFinite(s.colorHue) ? s.colorHue : 34;
+      ctx.strokeStyle = `hsla(${hue}, 92%, 70%, ${phaseDim})`;
+      ctx.lineWidth = 1 + s.connection * 1.5;
+
+      if (s.connection < 0.5 || s.comfortFactor < 0.45) {
+        ctx.setLineDash([4, 6]);
+        ctx.lineDashOffset = -t * 0.02;
+      }
+
+      const jitter = (s.connection < 0.35 ? (1 - s.connection) * 12 : 0) + (1 - s.comfortFactor) * 8;
+      const pe = pullTowardCenter(earth.x, earth.y);
+      const ps = pullTowardCenter(s.x, s.y);
+      const mx = (pe.x + ps.x) * 0.5 + (Math.random() - 0.5) * jitter;
+      const my = (pe.y + ps.y) * 0.5 + (Math.random() - 0.5) * jitter;
+
+      ctx.beginPath();
+      ctx.moveTo(pe.x, pe.y);
+      ctx.lineTo(mx, my);
+      ctx.lineTo(ps.x, ps.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawInterLinks(t) {
+      if (!interLinks.length) return;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (const link of interLinks) {
+        const alpha = 0.18 + link.strength * 0.5;
+        const pa = pullTowardCenter(link.a.x, link.a.y);
+        const pb = pullTowardCenter(link.b.x, link.b.y);
+        ctx.strokeStyle = `rgba(255, 188, 118, ${alpha})`;
+        ctx.lineWidth = 1.2 + link.strength * 1.8;
+        ctx.setLineDash([3, 6]);
+        ctx.lineDashOffset = -t * 0.018 + link.phase * 3;
+        ctx.beginPath();
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const mx = (pa.x + pb.x) * 0.5;
+        const my = (pa.y + pb.y) * 0.5;
+        const p = 1.2 + link.strength * 2.2;
+        ctx.fillStyle = `rgba(255,220,180,${0.12 + link.strength * 0.42})`;
+        ctx.beginPath();
+        ctx.arc(mx + Math.sin(t * 0.002 + link.phase) * 1.5, my + Math.cos(t * 0.002 + link.phase) * 1.5, p, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawEventPulse(t) {
+      if (!groupEvent.type || t >= groupEvent.until) return;
+      const life = clamp((groupEvent.until - t) / 2600, 0, 1);
+      const beat = 0.5 + 0.5 * Math.sin(t * 0.012);
+      const alpha = (0.035 + 0.06 * beat) * (0.45 + 0.55 * life);
+      let col = "120,180,255";
+      if (groupEvent.type === "signal-storm") col = "255,120,160";
+      else if (groupEvent.type === "group-drift") col = "120,255,220";
+      else if (groupEvent.type === "local-freeze") col = "170,200,255";
+
+      const edge = Math.max(10, Math.min(W, H) * 0.028);
+      ctx.save();
+      ctx.fillStyle = `rgba(${col}, ${alpha})`;
+      ctx.fillRect(0, 0, W, edge);
+      ctx.fillRect(0, H - edge, W, edge);
+      ctx.fillRect(0, edge, edge, H - edge * 2);
+      ctx.fillRect(W - edge, edge, edge, H - edge * 2);
+      ctx.restore();
+    }
+
+    function drawRadialBurst(targetCtx, sourceCanvas, cx, cy, strength) {
+      if (strength <= 0.001) return;
+      const layers = 10;
+      targetCtx.save();
+      targetCtx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < layers; i++) {
+        const scale = 1 + i * strength * 0.03;
+        targetCtx.globalAlpha = 0.06 + i * 0.004;
+        targetCtx.save();
+        targetCtx.translate(cx, cy);
+        targetCtx.scale(scale, scale);
+        targetCtx.translate(-cx, -cy);
+        targetCtx.drawImage(sourceCanvas, 0, 0, W, H);
+        targetCtx.restore();
+      }
+      targetCtx.restore();
+    }
+
+    function drawTunnel(targetCtx, sourceCanvas, cx, cy, strength) {
+      if (strength <= 0.002) return;
+      const layers = 12;
+      targetCtx.save();
+      for (let i = 0; i < layers; i++) {
+        const scale = 1 - i * strength * 0.04;
+        if (scale <= 0.02) continue;
+        targetCtx.globalAlpha = 0.05 + strength * 0.05;
+        targetCtx.save();
+        targetCtx.translate(cx, cy);
+        // Slight vertical pull for speed/fall sensation.
+        targetCtx.scale(scale, Math.max(0.08, scale - strength * 0.02));
+        targetCtx.translate(-cx, -cy);
+        targetCtx.drawImage(sourceCanvas, 0, 0, W, H);
+        targetCtx.restore();
+      }
+
+      const blurPasses = 3;
+      for (let i = 1; i <= blurPasses; i++) {
+        const yOffset = i * strength * 20;
+        targetCtx.globalAlpha = (0.028 + strength * 0.03) / i;
+        targetCtx.drawImage(sourceCanvas, 0, -yOffset, W, H);
+      }
+      targetCtx.restore();
+      targetCtx.globalAlpha = 1;
+    }
+
+    function drawEnergyCore(targetCtx, cx, cy, strength, t) {
+      if (strength <= 0.001) return;
+      targetCtx.save();
+      targetCtx.globalCompositeOperation = "lighter";
+
+      // Soft core: no hard white disk edge
+      const coreR = 28 + strength * 56;
+      const core = targetCtx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+      core.addColorStop(0, `rgba(255,255,255,${0.10 + strength * 0.26})`);
+      core.addColorStop(0.35, `rgba(255,230,180,${0.08 + strength * 0.18})`);
+      core.addColorStop(1, "rgba(0,0,0,0)");
+      targetCtx.fillStyle = core;
+      targetCtx.beginPath();
+      targetCtx.arc(cx, cy, coreR, 0, Math.PI * 2);
+      targetCtx.fill();
+
+      // Radial energy streaks from center
+      const rays = 22;
+      const len = Math.max(W, H) * (0.18 + strength * 0.42);
+      for (let i = 0; i < rays; i++) {
+        const a = (i / rays) * Math.PI * 2 + t * 0.0002;
+        const x2 = cx + Math.cos(a) * len;
+        const y2 = cy + Math.sin(a) * len;
+        const grd = targetCtx.createLinearGradient(cx, cy, x2, y2);
+        grd.addColorStop(0, `rgba(255,255,255,${0.03 + strength * 0.10})`);
+        grd.addColorStop(0.45, `rgba(255,180,120,${0.02 + strength * 0.08})`);
+        grd.addColorStop(1, "rgba(0,0,0,0)");
+        targetCtx.strokeStyle = grd;
+        targetCtx.lineWidth = 0.8 + strength * 1.6;
+        targetCtx.beginPath();
+        targetCtx.moveTo(cx, cy);
+        targetCtx.lineTo(x2, y2);
+        targetCtx.stroke();
+      }
+      targetCtx.restore();
+    }
+
+    function drawTunnelCore(targetCtx, cx, cy, strength, t) {
+      if (strength <= 0.003) return;
+      const pulse = 0.94 + Math.sin(t * 0.0045) * 0.06;
+      const radius = (50 + strength * 100) * pulse;
+      const hueA = (t * 0.03) % 360;
+      const hueB = (hueA + 85 + strength * 30) % 360;
+      const hueC = (hueA + 185 + strength * 40) % 360;
+      targetCtx.save();
+      targetCtx.globalCompositeOperation = "lighter";
+      const core = targetCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      core.addColorStop(0, `hsla(${hueA}, 100%, 75%, ${0.16 + strength * 0.3})`);
+      core.addColorStop(0.35, `hsla(${hueB}, 92%, 64%, ${0.12 + strength * 0.24})`);
+      core.addColorStop(0.72, `hsla(${hueC}, 88%, 58%, ${0.08 + strength * 0.18})`);
+      core.addColorStop(1, "rgba(0,0,0,0)");
+      targetCtx.fillStyle = core;
+      targetCtx.beginPath();
+      targetCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+      targetCtx.fill();
+
+      const ring = targetCtx.createRadialGradient(cx, cy, radius * 0.42, cx, cy, radius * 1.35);
+      ring.addColorStop(0, "rgba(255,255,255,0)");
+      ring.addColorStop(0.48, `hsla(${(hueB + 35) % 360}, 96%, 70%, ${0.08 + strength * 0.22})`);
+      ring.addColorStop(0.74, `hsla(${(hueC + 15) % 360}, 90%, 62%, ${0.06 + strength * 0.2})`);
+      ring.addColorStop(1, "rgba(0,0,0,0)");
+      targetCtx.fillStyle = ring;
+      targetCtx.beginPath();
+      targetCtx.arc(cx, cy, radius * 1.35, 0, Math.PI * 2);
+      targetCtx.fill();
+
+      const rim = targetCtx.createRadialGradient(cx, cy, radius * 0.65, cx, cy, radius * 1.7);
+      rim.addColorStop(0, `rgba(255,255,255,${0.03 + strength * 0.16})`);
+      rim.addColorStop(0.4, `hsla(${(hueA + 120) % 360}, 85%, 72%, ${0.05 + strength * 0.14})`);
+      rim.addColorStop(1, "rgba(0,0,0,0)");
+      targetCtx.fillStyle = rim;
+      targetCtx.beginPath();
+      targetCtx.arc(cx, cy, radius * 1.7, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.restore();
+    }
+
+    function triggerGroupEvent(t) {
+      const types = ["group-drift", "signal-storm", "local-freeze"];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const duration = 2200 + Math.random() * 2600;
+      groupEvent.type = type;
+      groupEvent.until = t + duration;
+      groupEvent.nextAt = t + duration + 5000 + Math.random() * 9000;
+      groupEvent.vecX = (Math.random() * 2 - 1) * 0.25;
+      groupEvent.vecY = (Math.random() * 2 - 1) * 0.25;
+      groupEvent.cx = Math.random() * W;
+      groupEvent.cy = Math.random() * H;
+      groupEvent.radius = Math.min(W, H) * (0.16 + Math.random() * 0.12);
+    }
+
+    function applyHiddenFieldsAndLinks(satList, dt, t) {
+      interLinks = [];
+      const radius = Math.min(W, H) * 0.3;
+      const r2 = radius * radius;
+
+      for (const field of hiddenFields) {
+        field.phase += dt * 0.00008;
+        field.x += Math.sin(field.phase) * 0.015 * dt;
+        field.y += Math.cos(field.phase * 1.2) * 0.015 * dt;
+      }
+
+      for (const s of satList) {
+        if (s.historical) continue;
+        for (const f of hiddenFields) {
+          const dx = f.x - s.x;
+          const dy = f.y - s.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 > f.radius * f.radius) continue;
+          const d = Math.sqrt(Math.max(1, d2));
+          const n = 1 - d / f.radius;
+          const ux = dx / d;
+          const uy = dy / d;
+
+          if (f.type === "attract") {
+            s.vx += ux * f.strength * n * dt;
+            s.vy += uy * f.strength * n * dt;
+          } else if (f.type === "repel") {
+            s.vx -= ux * f.strength * n * dt;
+            s.vy -= uy * f.strength * n * dt;
+          } else {
+            const j = n * 0.006;
+            s.vx += (Math.random() * 2 - 1) * j * dt;
+            s.vy += (Math.random() * 2 - 1) * j * dt;
+            s.instability = clamp(s.instability + n * 0.004, 0, 1);
+          }
+        }
+      }
+
+      for (const s of satList) {
+        s.linkBoost = 0;
+      }
+
+      for (let i = 0; i < satList.length; i++) {
+        const a = satList[i];
+        for (let j = i + 1; j < satList.length; j++) {
+          const b = satList[j];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const d2 = dx * dx + dy * dy;
+          if (a.historical || b.historical) {
+            // Historical traces drift independently: no tether/link entanglement.
+            if (a.historical && b.historical) {
+              const histSep = Math.min(W, H) * 0.18;
+              if (d2 < histSep * histSep) {
+                const d = Math.sqrt(Math.max(1, d2));
+                const ux = dx / d;
+                const uy = dy / d;
+                const repel = (1 - d / histSep) * 0.0032 * dt;
+                a.vx -= ux * repel;
+                a.vy -= uy * repel;
+                b.vx += ux * repel;
+                b.vy += uy * repel;
+              }
+            }
+            continue;
+          }
+          if (d2 > r2) continue;
+          const d = Math.sqrt(Math.max(1, d2));
+          const n = 1 - d / radius;
+          const ux = dx / d;
+          const uy = dy / d;
+
+          // 关系拉扯：保持轻微但可感知（P1/P2/P3 都成立）
+          const pull = n * 0.0022 * dt;
+          a.vx += ux * pull;
+          a.vy += uy * pull;
+          b.vx -= ux * pull;
+          b.vy -= uy * pull;
+
+          // 输入外溢：附近个体互相影响
+          const spill = n * 0.09;
+          a.vx += b.appliedJoyX * spill * 0.0009 * dt;
+          a.vy += b.appliedJoyY * spill * 0.0009 * dt;
+          b.vx += a.appliedJoyX * spill * 0.0009 * dt;
+          b.vy += a.appliedJoyY * spill * 0.0009 * dt;
+
+          a.linkBoost = Math.max(a.linkBoost || 0, n);
+          b.linkBoost = Math.max(b.linkBoost || 0, n);
+          interLinks.push({ a, b, strength: n, phase: (i * 17 + j * 31) * 0.1 });
+        }
+      }
+    }
+
+    function applyGroupEvent(satList, dt, t) {
+      if (!groupEvent.type && t >= groupEvent.nextAt) {
+        triggerGroupEvent(t);
+      }
+      if (!groupEvent.type) return;
+
+      if (t >= groupEvent.until) {
+        groupEvent.type = null;
+        return;
+      }
+
+      const p = clamp((groupEvent.until - t) / 2400, 0, 1);
+      for (const s of satList) {
+        if (s.historical) continue;
+        if (groupEvent.type === "group-drift") {
+          s.vx += groupEvent.vecX * dt * 0.0018;
+          s.vy += groupEvent.vecY * dt * 0.0018;
+        } else if (groupEvent.type === "signal-storm") {
+          const jitter = (0.006 + s.instability * 0.015) * (1 - p * 0.3);
+          s.vx += (Math.random() * 2 - 1) * jitter * dt;
+          s.vy += (Math.random() * 2 - 1) * jitter * dt;
+          s.glitchPhase = Math.min(10, s.glitchPhase + dt * 0.0005);
+        } else if (groupEvent.type === "local-freeze") {
+          const dx = s.x - groupEvent.cx;
+          const dy = s.y - groupEvent.cy;
+          const d = Math.hypot(dx, dy);
+          if (d < groupEvent.radius) {
+            const f = 1 - d / groupEvent.radius;
+            const damp = 1 - f * 0.18;
+            s.vx *= damp;
+            s.vy *= damp;
+          }
+        }
+      }
+    }
+
+    function drawSatellite(s, t) {
+      const legacyDim = s.historical ? 0.55 : s.legacy ? 0.35 : 1;
+      const connDim = s.connection == null ? 1 : lerp(0.28, 1, s.connection);
+      const fadeDim = 1;
+      const visualPhase = s.phase >= 4 ? 3 : s.phase;
+      const linkBoost = clamp(s.linkBoost || 0, 0, 1);
+      const hue = Number.isFinite(s.colorHue) ? s.colorHue : 34;
+      const isOfflineTrace = Boolean(s.historical || s.legacy);
+      const spawnDuration = Math.max(1, s.spawnDurationMs || 0);
+      const spawnP = s.spawnTime ? clamp((performance.now() - s.spawnTime) / spawnDuration, 0, 1) : 1;
+      const spawning = spawnP < 1;
+      // Very subtle spawn cue: quick settle from slightly enlarged, faint, and softly glowing.
+      const spawnScale = spawning ? lerp(1.65, 1, spawnP) : 1;
+      const spawnAlpha = spawning ? lerp(0.34, 1, spawnP) : 1;
+      const spawnGlowBoost = spawning ? lerp(1.35, 1, spawnP) : 1;
+
+      const flashing = performance.now() < s.flashUntil;
+      let r, glow, col;
+      if (flashing) {
+        r = 14;
+        glow = 28;
+        col = "rgba(255,255,255,0.95)";
+      } else {
+        const phaseBright = visualPhase === 1 ? 1 : visualPhase === 2 ? 0.78 : 0.56;
+        // Offline satellites stay small (same class as seeded traces) to avoid blocking view.
+        r = isOfflineTrace ? 6 : 8;
+        glow = (isOfflineTrace ? 16 : 22) * (1 + linkBoost * 0.32);
+        col = `hsla(${hue}, 92%, 70%, ${0.95 * phaseBright})`;
+      }
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = fadeDim * spawnAlpha;
+      const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, glow * spawnGlowBoost);
+      g.addColorStop(0, col);
+      g.addColorStop(0.4, col.replace("0.95", "0.35").replace("0.75", "0.25").replace("0.5", "0.2"));
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, glow * connDim * spawnGlowBoost, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r * 0.45 * connDim * spawnScale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      if (spawning) {
+        const ringP = spawnP;
+        const ringR = (r * 0.9 + ringP * 18) * connDim;
+        const ringA = (1 - ringP) * 0.16;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = `hsla(${hue}, 92%, 74%, ${ringA})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (flashing) {
+        const ang = s.rayAngle;
+        const len = Math.max(W, H) * 0.55;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const gr = ctx.createLinearGradient(s.x, s.y, s.x + Math.cos(ang) * len, s.y + Math.sin(ang) * len);
+        gr.addColorStop(0, "rgba(255,255,255,0.85)");
+        gr.addColorStop(0.15, "rgba(220,240,255,0.35)");
+        gr.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.strokeStyle = gr;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x + Math.cos(ang) * len, s.y + Math.sin(ang) * len);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const lab = labelFor(s);
+      if (lab) {
+        let hideLabel = false;
+        if (s.phase === 2) {
+          if (performance.now() < (s.phase2BlinkUntil || 0)) hideLabel = true;
+          else if (Math.random() < 0.012) s.phase2BlinkUntil = performance.now() + 100 + Math.random() * 220;
+        } else if (s.phase >= 4) {
+          if (performance.now() < (s.phase4BlinkUntil || 0)) hideLabel = true;
+          else if (Math.random() < 0.004) s.phase4BlinkUntil = performance.now() + 80 + Math.random() * 140;
+        }
+        if (!hideLabel) {
+          if (s.legacy && !s.historical && Math.random() < 0.55) hideLabel = true;
+        }
+        if (!hideLabel) {
+          ctx.save();
+          ctx.globalAlpha = fadeDim;
+          ctx.font = "10px ui-monospace, Menlo, monospace";
+          const phaseLabelDim = s.phase >= 4 ? 0.5 : s.phase === 2 ? 0.72 : 1;
+          ctx.fillStyle = `hsla(${hue}, 92%, 76%, ${0.55 * legacyDim * connDim * phaseLabelDim})`;
+          ctx.fillText(lab, s.x + 12, s.y - 8);
+          ctx.restore();
+        }
+      }
+    }
+
+    let lastT = performance.now();
+
+    function tick() {
+      const t = performance.now();
+      const dt = Math.min(50, t - lastT);
+      lastT = t;
+      const tt = t;
+      if (!historySeeded && W > 0 && H > 0) seedHistorySatellites();
+
+      const blend = globalPhaseBlend();
+      updateGate(dt, blend, t);
+      updateJoystickDrive(dt);
+
+      const gateVis = Math.min(1.15, 0.06 + gateRamp * (0.55 + 0.45 * blend.cold));
+
+      if (gl && stargateGL) {
+        renderStargateGL(tt, blend, gateVis);
+        ctx.clearRect(0, 0, W, H);
+      } else {
+        const warmC = { r: 8, g: 6, b: 10 };
+        const coldC = { r: 4, g: 8, b: 18 };
+        const bgR = warmC.r * blend.warm + coldC.r * blend.cold;
+        const bgG = warmC.g * blend.warm + coldC.g * blend.cold;
+        const bgB = warmC.b * blend.warm + coldC.b * blend.cold;
+        ctx.fillStyle = `rgb(${bgR},${bgG},${bgB})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      drawStars(tt);
+      drawEarth(tt, blend);
+
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      for (const s of sats.values()) {
+        if (s.phase >= 3) continue;
+        const g = gateRamp * (0.4 + 0.6 * blend.cold);
+        if (g < 0.02) continue;
+        const rad = s.phase === 1 ? 80 : 40;
+        const str = s.phase === 1 ? 0.06 : 0.14;
+        const gg = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, rad);
+        gg.addColorStop(0, `rgba(200, 230, 255, ${str * g})`);
+        gg.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = gg;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      const accel = 0.00085 * dt;
+      const maxDist = Math.min(W, H) * 0.6;
+
+      for (const s of sats.values()) {
+        const now = performance.now();
+        if (!s.haloDwellLastAt) s.haloDwellLastAt = now;
+        const dwellDelta = Math.max(0, now - s.haloDwellLastAt);
+        s.haloDwellLastAt = now;
+        if (!s.legacy && s.phase <= 2 && s.haloInside) {
+          s.haloDwellMs = (s.haloDwellMs || 0) + dwellDelta;
+          updateBestContactRecord(s, false);
+        }
+        if (!s.legacy && !s.ended && s.phase <= 2) {
+          const sinceInput = now - (s.lastMoveT || s.phaseEnteredAt || now);
+          if (sinceInput > LEGACY_SILENCE_TIMEOUT_MS) {
+            markLegacyFromDisconnect(s, now);
+          }
+        }
+
+        const friction = s.phase === 2 ? 0.965 : 0.978;
+        let latestDue = null;
+        while (s.inputQueue.length && s.inputQueue[0].applyAt <= performance.now()) {
+          latestDue = s.inputQueue.shift();
+        }
+        if (latestDue) {
+          s.appliedJoyX = latestDue.joyX;
+          s.appliedJoyY = latestDue.joyY;
+        }
+
+        const dxEarth = s.x - earth.x;
+        const dyEarth = s.y - earth.y;
+        const dist = Math.hypot(dxEarth, dyEarth);
+        s.prevConnection = s.connection;
+        const dxCenter = s.x - comfortCenter.x;
+        const dyCenter = s.y - comfortCenter.y;
+        const distToCenter = Math.hypot(dxCenter, dyCenter);
+        const comfortRadius = getComfortRadiusForSat(s, now);
+        s.comfortRadius = comfortRadius;
+        s.comfortFactor = clamp(1 - distToCenter / comfortRadius, 0, 1);
+        const haloInside = distToCenter <= comfortRadius;
+        if (s.phase <= 2 && !s.legacy) {
+          if (s.lastHaloReportAt === 0 || haloInside !== s.haloInside || now - s.lastHaloReportAt >= 350) {
+            reportHaloState(s.id, haloInside);
+            s.lastHaloReportAt = now;
+          }
+        }
+        s.haloInside = haloInside;
+        const spatialConnection = clamp(1 - Math.pow(dist / maxDist, 1.5), 0, 1);
+        const inevitableDecay = getInevitableDecay(s, now);
+        s.connection = clamp(spatialConnection * inevitableDecay, 0, 1);
+
+        if (!s.disconnected && s.prevConnection > 0.1 && s.connection <= 0.05) {
+          s.disconnected = true;
+          s.flashUntil = performance.now() + 400;
+          earth.flashUntil = performance.now() + 240;
+          archiveLostRecord(s);
+        }
+
+        if (!s.ended) {
+          const effectiveComfort = Math.max(0.32, s.comfortFactor);
+          const comfortLoss = 1 - effectiveComfort;
+          const baseDelay = s.phase <= 1 ? 0.18 : s.phase === 2 ? 0.26 : 0.4;
+          const extraDelay = s.phase <= 1 ? 0.12 : s.phase === 2 ? 0.2 : 0.3;
+          const response = clamp(1 - (baseDelay + comfortLoss * extraDelay), 0.12, 0.95);
+          s.controlJoyX = lerp(s.controlJoyX, s.appliedJoyX, response);
+          s.controlJoyY = lerp(s.controlJoyY, s.appliedJoyY, response);
+
+          const distortion = comfortLoss * (s.phase <= 1 ? 0.04 : s.phase === 2 ? 0.11 : 0.2);
+          const jitterX = (Math.random() * 2 - 1) * distortion;
+          const jitterY = (Math.random() * 2 - 1) * distortion;
+          const comfortDrivenX = (s.controlJoyX + jitterX) * effectiveComfort;
+          const comfortDrivenY = (s.controlJoyY + jitterY) * effectiveComfort;
+
+          const controlFloor = s.phase >= 3 ? 0.45 : 0.6;
+          const controlFactor = Math.max(controlFloor, s.connection);
+          const connectedJoyX = comfortDrivenX * controlFactor;
+          const connectedJoyY = comfortDrivenY * controlFactor;
+          s.vx += connectedJoyX * accel * 60;
+          s.vy += connectedJoyY * accel * 60;
+
+          const driftForce = (1 - s.connection) * (s.phase >= 3 ? 0.012 : 0.014) * (0.7 + comfortLoss * 0.3);
+          s.vx += driftForce * (Math.random() - 0.5);
+          s.vy += driftForce * (Math.random() - 0.5);
+
+          if (s.phase === 2) {
+            s.vx *= friction;
+            s.vy *= friction;
+            if (Math.random() < 0.006 * (dt / 16)) {
+              s.x += (Math.random() - 0.5) * 6;
+              s.y += (Math.random() - 0.5) * 6;
+            }
+            s.glitchPhase = Math.min(8, s.glitchPhase + dt * 0.00015);
+          } else {
+            s.vx *= 0.982;
+            s.vy *= 0.982;
+            s.glitchPhase = 0;
+          }
+          // 惯性增强：通过“减阻”实现，不再做速度放大避免失控爆炸
+          const extraSlip = s.phase <= 1 ? 0.005 : s.phase === 2 ? 0.018 : 0.035;
+          const slipGain = comfortLoss * extraSlip;
+          s.vx *= (1 + slipGain);
+          s.vy *= (1 + slipGain);
+          // 上限保护，避免边缘速度积累导致无法拉回
+          const vMax = s.phase <= 1 ? 1.35 : s.phase === 2 ? 1.6 : 1.95;
+          s.vx = clamp(s.vx, -vMax, vMax);
+          s.vy = clamp(s.vy, -vMax, vMax);
+          s.x += s.vx * dt * 0.06;
+          s.y += s.vy * dt * 0.06;
+        } else {
+          // Legacy drift: still moving, unstable direction, but slower than active control.
+          const driftForce = (1 - s.connection) * 0.012 + 0.004;
+          s.vx += driftForce * (Math.random() * 2 - 1);
+          s.vy += driftForce * (Math.random() * 2 - 1);
+          // Soft center pull near edges: avoid "stuck at border" without snapping back.
+          const edgeBand = Math.max(80, Math.min(W, H) * 0.12);
+          const nearL = clamp((edgeBand - s.x) / edgeBand, 0, 1);
+          const nearR = clamp((s.x - (W - edgeBand)) / edgeBand, 0, 1);
+          const nearT = clamp((edgeBand - s.y) / edgeBand, 0, 1);
+          const nearB = clamp((s.y - (H - edgeBand)) / edgeBand, 0, 1);
+          const edgePressure = Math.max(nearL, nearR, nearT, nearB);
+          if (edgePressure > 0) {
+            const toCenterX = CX - s.x;
+            const toCenterY = CY - s.y;
+            const len = Math.hypot(toCenterX, toCenterY) || 1;
+            const pull = edgePressure * 0.0105;
+            s.vx += (toCenterX / len) * pull * dt;
+            s.vy += (toCenterY / len) * pull * dt;
+          }
+          s.vx *= 0.992;
+          s.vy *= 0.992;
+          const legacyVMax = 1.1;
+          s.vx = clamp(s.vx, -legacyVMax, legacyVMax);
+          s.vy = clamp(s.vy, -legacyVMax, legacyVMax);
+          s.x += s.vx * dt * 0.045;
+          s.y += s.vy * dt * 0.045;
+        }
+
+        const margin = 40;
+        const hitX = s.x <= margin || s.x >= W - margin;
+        const hitY = s.y <= margin || s.y >= H - margin;
+        s.x = Math.max(margin, Math.min(W - margin, s.x));
+        s.y = Math.max(margin, Math.min(H - margin, s.y));
+        if (s.legacy) {
+          if (hitX) s.vx *= -0.35;
+          if (hitY) s.vy *= -0.35;
+        }
+
+        if ((s.phase <= 2 && !s.ended) || s.legacy) {
+          s.trail.push({ x: s.x, y: s.y });
+          const maxLen = s.legacy ? 18 : s.phase === 1 ? 28 : Math.max(8, 22 - s.glitchPhase * 2);
+          while (s.trail.length > maxLen) s.trail.shift();
+        }
+
+        if (s.phase === 4 && s.ended && Math.random() < dt / 35000) {
+          s.microFlashUntil = performance.now() + 180;
+        }
+
+        s.instability = clamp(s.instability * 0.985, 0, 1);
+      }
+
+      const activeSatList = [...sats.values()].filter((s) => s.phase <= 4);
+      applyHiddenFieldsAndLinks(activeSatList, dt, tt);
+      applyGroupEvent(activeSatList, dt, tt);
+
+      const list = [...sats.values()].sort((a, b) => (a.legacy ? -1 : 0) - (b.legacy ? -1 : 0));
+      for (const s of list) {
+        drawConnection(s, tt);
+      }
+      drawInterLinks(tt);
+      for (const s of list) {
+        drawTrail(s);
+      }
+      for (const s of list) {
+        drawSatellite(s, tt);
+      }
+      drawEventPulse(tt);
+
+      // 后处理：以中心为核心的径向爆发（替代随机 glitch 成为主导视觉）
+      const burstStrength = Math.pow(1 - blend.avgConnection, 2.2);
+      const tunnelStrength = Math.pow(1 - blend.avgConnection, 2);
+      const voicePresence = 1;
+      updateExternalSound(blend.avgConnection, burstStrength, tunnelStrength, tt, voicePresence);
+      tunnelPullStrength = tunnelStrength;
+      if (burstStrength > 0.001) {
+        ctx.save();
+        ctx.filter = `
+          contrast(${1 + burstStrength * 2.4})
+          saturate(${1 - tunnelStrength * 0.45})
+          brightness(${1 + burstStrength * 0.35})
+        `;
+        drawRadialBurst(ctx, cv, CX, CY, burstStrength);
+        drawTunnel(ctx, cv, CX, CY, tunnelStrength);
+        drawEnergyCore(ctx, CX, CY, burstStrength, tt);
+        drawTunnelCore(ctx, CX, CY, tunnelStrength, tt);
+        ctx.restore();
+      }
+
+      setHud(
+        `WS — ${wsConnected ? "在线" : "离线"} · 卫星 ${sats.size} · 连接 ${Math.round(blend.avgConnection * 100)}% · 关系 ${interLinks.length} · 事件 ${groupEvent.type || "none"}`,
+        wsConnected ? "ok" : "err"
+      );
+      updateDebugPanel();
+      renderConnectionLog();
+
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+
+    audioUnlockEl.addEventListener("click", ensureExternalSoundStarted);
+    window.addEventListener("pointerdown", ensureExternalSoundStarted, { passive: true });
+    window.addEventListener("touchstart", ensureExternalSoundStarted, { passive: true });
+    window.addEventListener("keydown", ensureExternalSoundStarted);
+  </script>
+</body>
+</html>
