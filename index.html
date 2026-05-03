@@ -14,6 +14,10 @@
       --error: #ff5a5a;
       --font-mono: system-ui, -apple-system, BlinkMacSystemFont, "Space Mono", Menlo, monospace;
       --font-serif: "IM Fell English", "Times New Roman", serif;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
     }
 
     * {
@@ -26,6 +30,8 @@
       padding: 0;
       width: 100%;
       height: 100%;
+      min-height: 100vh;
+      min-height: 100dvh;
       background: var(--bg);
       color: var(--color-warm);
       font-family: var(--font-mono);
@@ -44,6 +50,8 @@
       height: 100%;
       max-width: 480px;
       max-height: 100vh;
+      max-height: 100dvh;
+      min-height: 0;
       background: #000;
       color: var(--color-warm);
       overflow: hidden;
@@ -70,14 +78,14 @@
       border-right: 1px solid currentColor;
     }
     .hud-bl {
-      bottom: 26px;
-      left: 10px;
+      bottom: max(26px, var(--safe-bottom));
+      left: max(10px, var(--safe-left));
       border-bottom: 1px solid currentColor;
       border-left: 1px solid currentColor;
     }
     .hud-br {
-      bottom: 26px;
-      right: 10px;
+      bottom: max(26px, var(--safe-bottom));
+      right: max(10px, var(--safe-right));
       border-bottom: 1px solid currentColor;
       border-right: 1px solid currentColor;
     }
@@ -160,23 +168,59 @@
         transparent;
     }
 
+    /* 相机全屏：隐藏上方文字区，避免与 .camera-view 对半分高只剩底部取景框 */
     .app.phase-3-camera .text-console {
-      background: linear-gradient(
-        165deg,
-        rgba(40, 0, 55, 0.55) 0%,
-        rgba(0, 35, 48, 0.4) 50%,
-        rgba(55, 0, 40, 0.5) 100%
-      );
-      box-shadow: 0 0 0 1px rgba(255, 0, 200, 0.12);
+      display: none;
+    }
+
+    /* 相机关闭后终端复出：垂直居中「相机已关闭 / LOST / 电力分配」段 */
+    .app.phase-3-camera.post-camera-outro .text-console {
+      display: flex;
+    }
+
+    .app.post-camera-outro #textLines {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      box-sizing: border-box;
+      padding: 8px 6px;
+      min-height: 0;
+      flex: 1 1 auto;
+    }
+
+    .app.post-camera-outro #textLines > .text-line {
+      width: 100%;
+      max-width: min(28em, 100%);
+      text-align: center;
+    }
+
+    .app.post-camera-outro #textLines > .lost-record-box {
+      width: 100%;
+      max-width: min(28em, 100%);
+      box-sizing: border-box;
     }
 
     .app.phase-3-camera .camera-view {
+      flex: 1 1 0%;
+      min-height: 0;
+      width: 100%;
+      align-items: stretch;
       background:
         radial-gradient(ellipse 100% 70% at 50% 0%, rgba(255, 0, 210, 0.2) 0%, transparent 45%),
         radial-gradient(ellipse 90% 60% at 50% 100%, rgba(0, 255, 245, 0.12) 0%, transparent 50%);
     }
 
     .app.phase-3-camera .camera-inner {
+      flex: 1 1 0%;
+      min-height: 0;
+      width: 100%;
+      max-width: 100%;
+      height: 100%;
+      max-height: 100%;
+      aspect-ratio: auto;
+      /* 覆盖通栏 .camera-inner 的 max-height / 9:16 限制，铺满中间栏 */
       background: linear-gradient(160deg, #12021c 0%, #030814 45%, #050218 100%);
       box-shadow:
         0 0 0 1px rgba(255, 80, 200, 0.35),
@@ -264,10 +308,15 @@
     .content {
       position: absolute;
       inset: 0;
-      padding: 16px 14px 22px;
+      padding:
+        max(16px, var(--safe-top))
+        max(14px, var(--safe-right))
+        max(22px, calc(12px + var(--safe-bottom)))
+        max(14px, var(--safe-left));
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      min-height: 0;
     }
 
     .top-bar {
@@ -323,6 +372,7 @@
 
     .middle {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
@@ -336,6 +386,7 @@
       color: var(--color-warm);
       margin-bottom: 6px;
       min-height: 80px;
+      flex-shrink: 0;
     }
 
     .telemetry-row {
@@ -399,30 +450,90 @@
 
     .center-console {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      align-items: center;
+      justify-content: flex-start;
+      align-items: stretch;
       position: relative;
       overflow: hidden;
     }
 
     .text-console {
       width: 100%;
+      max-width: 100%;
       max-height: 100%;
+      min-height: 0;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
       border-radius: 6px;
       padding: 10px 10px 8px;
       background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.85));
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
       font-size: 13px;
       line-height: 1.4;
+      overflow-x: hidden;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
       color: var(--color-warm);
+    }
+
+    /* 遥测下方文案区：占满中间滚动容器高度，便于 P1/P2 把卫星提示顶到底部 */
+    #textLines {
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+    }
+
+    /* P0：开场终端四行 + 命名区在控制台内水平、垂直居中 */
+    .app.phase-0 #textLines {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      box-sizing: border-box;
+      padding: 8px 6px;
+    }
+
+    .app.phase-0 #textLines > .text-line {
+      width: 100%;
+      max-width: min(22em, 100%);
+      text-align: center;
+    }
+
+    .app.phase-0 #textLines > .input-row {
+      margin-top: 14px;
+      width: 100%;
+      max-width: min(340px, 100%);
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+    }
+
+    /* P1/P2：人格框在文案区下沿，与摇杆之间留出距离，不贴太紧 */
+    .app.phase-1 #textLines,
+    .app.phase-2 #textLines {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: stretch;
+      text-align: left;
+      box-sizing: border-box;
+      padding-bottom: 14px;
+    }
+
+    .app.phase-1 .joystick-wrapper,
+    .app.phase-2 .joystick-wrapper {
+      margin-top: 18px;
     }
 
     .text-line {
       white-space: pre-wrap;
       word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     .cursor {
@@ -491,13 +602,17 @@
       padding: 4px 10px;
     }
 
-    /* 摇杆区 */
+    /* 摇杆区：限制高度 + 底部留白，避免贴 Home 条 / 遮挡进度条 */
     .joystick-wrapper {
-      height: 54%;
+      flex: 0 1 auto;
+      min-height: 0;
+      max-height: min(42vh, 300px);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: flex-start;
+      padding-bottom: max(10px, var(--safe-bottom));
+      margin-top: 4px;
       pointer-events: none;
       position: relative;
       z-index: 2;
@@ -509,22 +624,24 @@
       text-transform: uppercase;
       color: rgba(255, 210, 150, 0.9);
       text-shadow: 0 0 12px rgba(255, 177, 90, 0.5);
-      opacity: 0.95;
-      margin-bottom: 12px;
-      animation: hintFade 4s ease-out forwards;
+      opacity: 0.9;
+      margin-bottom: 8px;
+      padding: 0 8px;
+      text-align: center;
+      max-width: 100%;
+      word-break: break-word;
     }
 
-    @keyframes hintFade {
-      0% { opacity: 0; }
-      10% { opacity: 0.9; }
-      100% { opacity: 0; }
+    .app.phase-2 .joystick-hint {
+      color: rgba(200, 230, 255, 0.88);
+      text-shadow: 0 0 12px rgba(111, 208, 255, 0.35);
     }
 
     .joystick {
       position: relative;
-      width: 72%;
+      width: min(260px, 78%);
       aspect-ratio: 1;
-      max-width: 320px;
+      max-width: min(320px, calc(100% - 24px));
       border-radius: 50%;
       background: radial-gradient(circle at 30% 20%, #3f3f3f 0, #0c0c0c 50%, #000 100%);
       box-shadow:
@@ -711,18 +828,26 @@
     }
 
     .countdown {
-      font-size: 42px;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.9);
+      z-index: 5;
+      width: 100%;
+      max-width: 100%;
+      padding: 0 12px;
+      box-sizing: border-box;
+      font-size: clamp(28px, 12vmin, 42px);
       letter-spacing: 0.2em;
       text-align: center;
-      margin-top: 4px;
+      pointer-events: none;
       opacity: 0;
-      transform: scale(0.9);
       transition: opacity 0.2s, transform 0.2s;
     }
 
     .countdown.visible {
       opacity: 1;
-      transform: scale(1);
+      transform: translate(-50%, -50%) scale(1);
     }
 
     .flash {
@@ -748,17 +873,21 @@
       position: relative;
       width: 100%;
       flex: 1;
+      min-height: 0;
       display: none;
       flex-direction: column;
       justify-content: center;
       align-items: center;
+      overflow: hidden;
+      padding: 0 2px;
     }
 
     .camera-inner {
       position: relative;
       width: 100%;
+      max-width: 100%;
       aspect-ratio: 9 / 16;
-      max-height: 80%;
+      max-height: min(58dvh, calc(100dvh - 220px), 100%);
       border-radius: 6px;
       overflow: hidden;
       box-shadow:
@@ -947,7 +1076,7 @@
       opacity: 0.8;
     }
 
-    /* Phase 4 文本 */
+    /* Phase 4 文本：顶栏 + 可滚动长文 + 底栏按钮，不挤出视区 */
     .phase4-text {
       text-align: center;
       font-size: 12px;
@@ -956,23 +1085,69 @@
       color: rgba(140, 170, 200, 0.35);
       opacity: 0;
       transition: opacity 0.8s ease;
+      width: 100%;
+      max-width: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-sizing: border-box;
+    }
+
+    .app.phase-4 .phase4-text {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      max-height: 100%;
+      overflow: hidden;
+      padding: 8px 8px 0;
+      /* 黑底 HUD 终端感，与主控制台统一 */
+      background: radial-gradient(circle at 50% 0%, rgba(100, 160, 255, 0.06), rgba(0, 0, 0, 0.9));
+      box-shadow: 0 0 0 1px rgba(200, 230, 255, 0.06) inset, 0 0 0 1px rgba(0, 0, 0, 0.45);
+      border-radius: 6px;
+    }
+
+    .phase4-header {
+      flex-shrink: 0;
+      width: 100%;
+      max-width: min(560px, 100%);
+      text-align: center;
+      box-sizing: border-box;
     }
 
     .phase4-text span.status {
       display: block;
       margin-top: 6px;
       font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    #phase4VoyagerLabel {
+      flex-shrink: 0;
     }
 
     .phase4-narrative {
-      margin-top: 14px;
-      max-width: min(560px, 88vw);
+      margin-top: 10px;
+      width: 100%;
+      max-width: min(560px, 100%);
+      flex: 1 1 0%;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
       text-align: left;
       line-height: 1.55;
       font-size: 12px;
       letter-spacing: 0.04em;
-      color: rgba(185, 206, 232, 0.74);
+      color: rgba(185, 206, 232, 0.78);
       white-space: pre-line;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      padding: 0 2px 10px 4px;
+      /* 右侧留出滚动/手势空间 */
     }
 
     .phase4-narrative .key-line {
@@ -982,11 +1157,18 @@
     }
 
     .phase4-restart {
-      margin-top: 18px;
+      margin-top: 0;
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 10px;
+      width: 100%;
+      max-width: min(560px, 100%);
+      padding: 10px 8px max(10px, var(--safe-bottom));
+      box-sizing: border-box;
+      background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 32%, rgba(0, 0, 0, 0.72) 100%);
+      box-shadow: 0 -1px 0 rgba(200, 230, 255, 0.05);
     }
 
     .phase4-restart .prompt {
@@ -1017,12 +1199,23 @@
     }
 
     .satellite-dialog {
+      flex-shrink: 1;
+      align-self: stretch;
+      width: 100%;
+      max-width: 100%;
       margin-top: 6px;
+      margin-bottom: 2px;
       padding: 10px 12px;
       border: 1px solid rgba(255, 190, 120, 0.22);
       background: linear-gradient(180deg, rgba(255, 170, 90, 0.07), rgba(0, 0, 0, 0.08));
       border-radius: 8px;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+      max-height: min(220px, 42dvh);
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
     }
 
     .satellite-dialog-body {
@@ -1030,6 +1223,8 @@
       line-height: 1.6;
       color: rgba(255, 210, 155, 0.94);
       white-space: pre-line;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     .intro-overlay {
@@ -1037,22 +1232,104 @@
       inset: 0;
       z-index: 6;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       pointer-events: auto;
       background: rgba(3, 6, 14, 0.46);
+      padding: max(6px, var(--safe-top)) max(8px, var(--safe-right)) max(8px, var(--safe-bottom)) max(8px, var(--safe-left));
+      box-sizing: border-box;
+      overflow: hidden;
+      min-height: 0;
+      -webkit-overflow-scrolling: touch;
     }
 
     .intro-dialog {
-      width: min(540px, calc(100vw - 36px));
-      min-height: 180px;
-      padding: 18px 18px 16px;
+      position: relative;
+      overflow: hidden;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: min(520px, 100%);
+      max-height: 100%;
+      min-height: 0;
+      flex-shrink: 1;
+      padding: 16px 12px 12px 12px;
       border: 1px solid rgba(180, 220, 255, 0.28);
       background: linear-gradient(180deg, rgba(8, 14, 26, 0.9), rgba(5, 10, 20, 0.88));
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset, 0 22px 48px rgba(0, 0, 0, 0.45);
       display: flex;
       flex-direction: column;
+      gap: 0;
+    }
+
+    .intro-dialog-body-wrap {
+      display: flex;
+      flex-direction: column;
       gap: 10px;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* 像素风 IP：挂在蒙层中、与对话框等宽、浮在盒体上方，不压正文 */
+    .intro-ip-mascot {
+      position: relative;
+      flex-shrink: 0;
+      width: 100%;
+      max-width: min(520px, 100%);
+      display: flex;
+      justify-content: flex-end;
+      align-items: flex-end;
+      margin: 0 0 2px 0;
+      padding: 0 10px;
+      box-sizing: border-box;
+      z-index: 2;
+      pointer-events: none;
+      animation: intro-ip-patrol 5.8s ease-in-out infinite;
+      filter: drop-shadow(0 0 12px rgba(200, 220, 255, 0.26));
+    }
+
+    .intro-ip-mascot-inner {
+      animation: intro-ip-breathe 2.8s ease-in-out infinite;
+      transform-origin: 50% 85%;
+    }
+
+    .intro-ip-mascot canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    @keyframes intro-ip-patrol {
+      0%, 100% { transform: translate(-18px, 0); }
+      50% { transform: translate(18px, -2px); }
+    }
+
+    @keyframes intro-ip-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.045); }
+    }
+
+    @keyframes intro-ip-blink {
+      0%, 92%, 100% { transform: scaleY(1); opacity: 1; }
+      94%, 96% { transform: scaleY(0.12); opacity: 0.85; }
+    }
+
+    .intro-ip-eye {
+      position: absolute;
+      background: rgba(245, 248, 255, 0.96);
+      border-radius: 0;
+      transform-origin: 50% 50%;
+      animation: intro-ip-blink 4.8s ease-in-out infinite;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.38);
+    }
+
+    .intro-ip-eye--l {
+      animation-delay: 0.05s;
+    }
+
+    .intro-ip-eye--r {
+      animation-delay: 0.08s;
     }
 
     .intro-dialog-title {
@@ -1060,20 +1337,41 @@
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: rgba(150, 190, 230, 0.74);
+      flex-shrink: 0;
+      padding-right: 0;
+      max-width: 100%;
+      box-sizing: border-box;
     }
 
     .intro-dialog-text {
-      min-height: 88px;
-      font-size: 14px;
-      line-height: 1.7;
+      flex: 1 1 auto;
+      min-height: 0;
+      font-size: clamp(12px, 3.6vw, 14px);
+      line-height: 1.55;
       white-space: pre-line;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       color: rgba(228, 238, 255, 0.92);
     }
 
     .intro-dialog-actions {
       margin-top: auto;
+      flex-shrink: 0;
       display: flex;
       justify-content: center;
+      padding-top: 4px;
+    }
+
+    .intro-dialog-actions .button {
+      flex-shrink: 0;
+      max-width: 100%;
+      white-space: normal;
+      text-align: center;
+      line-height: 1.3;
+      padding: 6px 10px;
     }
 
     .warning-title {
@@ -1082,11 +1380,17 @@
     }
 
     .warning-body {
-      min-height: 86px;
+      flex: 1 1 auto;
+      min-height: 0;
       font-size: 14px;
       line-height: 1.7;
       color: rgba(255, 214, 190, 0.95);
       white-space: pre-line;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .lost-record-box {
@@ -1145,6 +1449,76 @@
       50% { transform: translateX(1px); }
       75% { transform: translateX(-0.5px); }
       100% { transform: translateX(0); }
+    }
+
+    @media (max-height: 700px) {
+      .telemetry {
+        min-height: 64px;
+        font-size: 12px;
+      }
+
+      .joystick-wrapper {
+        max-height: min(38vh, 260px);
+      }
+
+      .satellite-dialog {
+        max-height: min(200px, 38dvh);
+        padding: 8px 10px;
+      }
+
+      .satellite-dialog-body {
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      @keyframes intro-ip-patrol {
+        0%, 100% { transform: scale(0.9) translate(-12px, 0); }
+        50% { transform: scale(0.9) translate(12px, -1px); }
+      }
+
+      .intro-dialog {
+        padding-top: 12px;
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+    }
+
+    @media (max-height: 580px) {
+      .satellite-dialog {
+        max-height: min(160px, 32dvh);
+      }
+
+      .satellite-dialog-body {
+        font-size: 11px;
+      }
+
+      .app.phase-4 .phase4-narrative {
+        font-size: 11px;
+        line-height: 1.45;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .top-bar {
+        font-size: 11px;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .intro-dialog {
+        width: 100%;
+        max-width: 100%;
+        padding: 12px 10px 10px 10px;
+      }
+
+      .satellite-dialog {
+        padding: 8px 10px;
+      }
+
+      .satellite-dialog-body {
+        font-size: 12px;
+      }
     }
   </style>
 </head>
@@ -1235,8 +1609,10 @@
 
           <!-- Phase 4 文本 -->
           <div class="phase4-text" id="phase4Text" style="display:none;">
-            <div id="phase4VoyagerLabel">VGR-02</div>
-            <span class="status">任务状态：进行中</span>
+            <div class="phase4-header">
+              <div id="phase4VoyagerLabel">VGR-02</div>
+              <span class="status">任务状态：进行中</span>
+            </div>
             <div class="phase4-narrative" id="phase4Narrative"></div>
             <div class="phase4-restart" id="phase4Restart" style="display:none;">
               <div class="prompt">是否重新开始？ / Restart the experience?</div>
@@ -1363,6 +1739,17 @@
       haloTrackLastTs: 0,
       batteryWarn30Shown: false,
       batteryWarn10Shown: false,
+      /** P2：电量≤10% 时阻断式警告，确认前冻结电量读数 */
+      batteryTenGateActive: false,
+      batteryTenGateAcked: false,
+      batteryTenFreezeElapsed: 0,
+      batteryTenFlickerHandle: null,
+      batteryTenOverlayEl: null,
+      /** navigator.vibrate：各档仅触发一次，直至 reset / 新阶段 */
+      batteryHaptic30Done: false,
+      batteryHaptic15Done: false,
+      batteryHaptic5Done: false,
+      disconnectWarnHapticDone: false,
     };
 
     const PERSONA_HINT_TEMPLATES = [
@@ -1371,7 +1758,7 @@
       "{name}：当我偏离光晕时，你的指令会变慢。这不是故障，是距离。\n{name}: When I move away from the halo, your commands become slower. It is not a fault. It is distance.",
       "{name}：我还能回应你，但每一秒都比上一秒更困难。\n{name}: I can still respond, but each second is harder than the last.",
       "{name}：如果你听见我沉默，请不要惊讶。连接正在变薄。\n{name}: If you hear me fall silent, do not be surprised. The connection is thinning.",
-      "{name}：信号还在，但它不再完整。你会先听见迟疑，再看见偏移。\n{name}: The signal remains, but no longer intact. You will hear hesitation before you see drift.",
+      "{name}：信号还在，但已不再完整。你会先听见迟疑，再看见偏移。\n{name}: The signal remains, but is no longer intact. You will hear hesitation before you see drift.",
       "{name}：靠近一点，我会更稳定。离开一点，我会更像在下坠。\n{name}: Move closer and I become steadier. Move farther and I feel like I am falling.",
       "{name}：有时我看起来还在原地，其实已经在慢慢远离。\n{name}: Sometimes I seem unchanged, but I am already moving away.",
       "{name}：如果你还在这里，就再陪我一会儿。系统正在记录这一段时间。\n{name}: If you are still here, stay with me a little longer. The system is recording this time.",
@@ -1672,9 +2059,28 @@
       state.haloInside = !!nextInside;
     }
 
+    function cleanupBatteryTenGateUI() {
+      if (state.batteryTenFlickerHandle) {
+        clearInterval(state.batteryTenFlickerHandle);
+        state.batteryTenFlickerHandle = null;
+      }
+      if (state.batteryTenOverlayEl && state.batteryTenOverlayEl.parentNode) {
+        state.batteryTenOverlayEl.remove();
+      }
+      state.batteryTenOverlayEl = null;
+      state.batteryTenGateActive = false;
+    }
+
     function resetBatteryWarningState() {
+      cleanupBatteryTenGateUI();
+      state.batteryTenGateAcked = false;
+      state.batteryTenFreezeElapsed = 0;
       state.batteryWarn30Shown = false;
       state.batteryWarn10Shown = false;
+      state.batteryHaptic30Done = false;
+      state.batteryHaptic15Done = false;
+      state.batteryHaptic5Done = false;
+      state.disconnectWarnHapticDone = false;
       thrValueEl.classList.remove("telemetry-warning", "telemetry-critical");
     }
 
@@ -1687,18 +2093,49 @@
 
     function applyBatteryAlert(pct) {
       thrValueEl.classList.remove("telemetry-warning", "telemetry-critical");
+
+      if (pct <= 5) {
+        thrValueEl.classList.add("telemetry-critical");
+        if (!state.batteryHaptic5Done) {
+          vibrate([0, 160, 32, 88, 32, 88, 32, 220]);
+          state.batteryHaptic5Done = true;
+        }
+        if (!state.batteryWarn10Shown) {
+          if (!state.batteryTenGateActive) {
+            showBatteryWarningLine("> ⚠ 电量低于10% / Battery below 10%");
+          }
+          state.batteryWarn10Shown = true;
+        }
+        return;
+      }
       if (pct <= 10) {
         thrValueEl.classList.add("telemetry-critical");
         if (!state.batteryWarn10Shown) {
-          showBatteryWarningLine("> ⚠ 电量低于10% / Battery below 10%");
+          if (!state.batteryTenGateActive) {
+            showBatteryWarningLine("> ⚠ 电量低于10% / Battery below 10%");
+          }
           state.batteryWarn10Shown = true;
         }
-      } else if (pct <= 30) {
+        return;
+      }
+      if (pct <= 15) {
+        if (!state.batteryHaptic15Done) {
+          vibrate([22, 50, 22, 50, 22, 50, 22, 50, 22, 50, 22]);
+          state.batteryHaptic15Done = true;
+        }
         thrValueEl.classList.add("telemetry-warning");
+        return;
+      }
+      if (pct <= 30) {
+        if (!state.batteryHaptic30Done) {
+          vibrate(40);
+          state.batteryHaptic30Done = true;
+        }
         if (!state.batteryWarn30Shown) {
           showBatteryWarningLine("> ⚠ 电量低于30% / Battery below 30%");
           state.batteryWarn30Shown = true;
         }
+        thrValueEl.classList.add("telemetry-warning");
       }
     }
 
@@ -1718,6 +2155,7 @@
 
     function clearPhaseRuntime() {
       updateHaloDwell();
+      cleanupBatteryTenGateUI();
       clearBatteryTick();
       clearPhaseTimeouts();
       clearDelayedInputs();
@@ -1797,6 +2235,7 @@
       phase4RestartEl.style.display = "none";
       phase4TextEl.style.opacity = "0";
       phase4TextEl.style.display = "none";
+      textConsoleEl.style.display = "";
       textConsoleEl.style.opacity = "1";
       textConsoleEl.style.filter = "";
       centerConsoleEl.style.filter = "";
@@ -1885,25 +2324,40 @@
       }
 
       if (state.phase === Phase.DRIFT) {
-        const t = clamp((now - state.phaseStartTime) / state.driftDuration, 0, 1);
+        let t = clamp((now - state.phaseStartTime) / state.driftDuration, 0, 1);
+        if (state.batteryTenGateActive && !state.batteryTenGateAcked) {
+          t = clamp(state.batteryTenFreezeElapsed / state.driftDuration, 0, 1);
+        }
         const mercyWindow = t > 0.86 && t < 0.93;
+        let profile;
         if (mercyWindow) {
-          return {
+          profile = {
             delayMs: lerp(40, 90, (t - 0.86) / 0.07),
             drift: 0.03,
             decay: 0.04,
             feedbackLag: 0.08,
             instability: instability * 0.35,
           };
+        } else {
+          const collapse = clamp((t - 0.93) / 0.07, 0, 1);
+          profile = {
+            delayMs: lerp(30, 220, t) + instability * 80 + collapse * 120,
+            drift: lerp(0.02, 0.12, t) + instability * 0.05 + collapse * 0.1,
+            decay: lerp(0.02, 0.5, t) + instability * 0.06 + collapse * 0.12,
+            feedbackLag: lerp(0.1, 0.5, t) + collapse * 0.2,
+            instability,
+          };
         }
-        const collapse = clamp((t - 0.93) / 0.07, 0, 1);
-        return {
-          delayMs: lerp(30, 220, t) + instability * 80 + collapse * 120,
-          drift: lerp(0.02, 0.12, t) + instability * 0.05 + collapse * 0.1,
-          decay: lerp(0.02, 0.5, t) + instability * 0.06 + collapse * 0.12,
-          feedbackLag: lerp(0.1, 0.5, t) + collapse * 0.2,
-          instability,
-        };
+        if (state.batteryTenGateActive && !state.batteryTenGateAcked) {
+          return {
+            delayMs: profile.delayMs + 110,
+            drift: profile.drift * 1.08,
+            decay: Math.min(0.99, profile.decay + 0.04),
+            feedbackLag: Math.min(0.72, profile.feedbackLag + 0.12),
+            instability: profile.instability,
+          };
+        }
+        return profile;
       }
 
       if (state.phase === Phase.LOOK || state.phase === Phase.LOOK_CAMERA || state.phase === Phase.ENDING) {
@@ -1951,6 +2405,72 @@
       }, 120);
     }
 
+    function openBatteryTenPercentGate(tAtCross) {
+      if (state.batteryTenGateAcked || state.phase !== Phase.DRIFT || state.batteryTenGateActive) return;
+      state.batteryTenGateActive = true;
+      state.batteryTenFreezeElapsed = tAtCross * state.driftDuration;
+      state.batteryWarn10Shown = true;
+
+      vibrate([0, 140, 36, 110, 36, 110, 36, 200]);
+      flashEl.classList.add("active");
+      setTimeout(() => flashEl.classList.remove("active"), 260);
+
+      state.batteryTenFlickerHandle = setInterval(() => {
+        flashEl.classList.add("active");
+        setTimeout(() => flashEl.classList.remove("active"), 70);
+        appEl.classList.add("glitch");
+        setTimeout(() => appEl.classList.remove("glitch"), 85);
+      }, 720);
+
+      const overlay = document.createElement("div");
+      overlay.className = "intro-overlay";
+      const dialog = document.createElement("div");
+      dialog.className = "intro-dialog";
+      dialog.style.borderColor = "rgba(255, 120, 100, 0.42)";
+      dialog.style.boxShadow =
+        "0 0 0 1px rgba(255, 80, 60, 0.12) inset, 0 22px 48px rgba(0, 0, 0, 0.55)";
+      const title = document.createElement("div");
+      title.className = "intro-dialog-title warning-title";
+      title.textContent = "⚠ 警告 / WARNING";
+      const body = document.createElement("div");
+      body.className = "warning-body";
+      body.textContent =
+        "警告：卫星即将失去控制，请珍惜最后的时间。\n"
+        + "WARNING: The satellite is about to lose control. Please cherish the remaining time.";
+      const actions = document.createElement("div");
+      actions.className = "intro-dialog-actions";
+      const okBtn = document.createElement("button");
+      okBtn.className = "button button-ghost";
+      okBtn.textContent = "确认 / ACKNOWLEDGE";
+      actions.appendChild(okBtn);
+      const dialogInner = document.createElement("div");
+      dialogInner.className = "intro-dialog-body-wrap";
+      dialogInner.appendChild(title);
+      dialogInner.appendChild(body);
+      dialogInner.appendChild(actions);
+      dialog.appendChild(dialogInner);
+      overlay.appendChild(dialog);
+      centerConsoleEl.appendChild(overlay);
+      state.batteryTenOverlayEl = overlay;
+
+      okBtn.addEventListener(
+        "click",
+        () => {
+          if (state.batteryTenFlickerHandle) {
+            clearInterval(state.batteryTenFlickerHandle);
+            state.batteryTenFlickerHandle = null;
+          }
+          overlay.remove();
+          state.batteryTenOverlayEl = null;
+          state.batteryTenGateAcked = true;
+          state.batteryTenGateActive = false;
+          state.phaseStartTime = performance.now() - state.batteryTenFreezeElapsed;
+          vibrate(55);
+        },
+        { once: true }
+      );
+    }
+
     function updateThrBatteryDisplay() {
       if (state.phase === Phase.ORBIT) {
         const t = clamp((performance.now() - state.phaseStartTime) / state.orbitDuration, 0, 1);
@@ -1958,8 +2478,15 @@
         thrValueEl.textContent = `${pct}%`;
         applyBatteryAlert(pct);
       } else if (state.phase === Phase.DRIFT) {
-        const t = clamp((performance.now() - state.phaseStartTime) / state.driftDuration, 0, 1);
-        const pct = Math.round(lerp(50, 0, t));
+        let t = clamp((performance.now() - state.phaseStartTime) / state.driftDuration, 0, 1);
+        let pct = Math.round(lerp(50, 0, t));
+        if (!state.batteryTenGateAcked && pct <= 10 && !state.batteryTenGateActive) {
+          openBatteryTenPercentGate(t);
+        }
+        if (state.batteryTenGateActive && !state.batteryTenGateAcked) {
+          t = clamp(state.batteryTenFreezeElapsed / state.driftDuration, 0, 1);
+          pct = Math.round(lerp(50, 0, t));
+        }
         thrValueEl.textContent = `${pct}%`;
         applyBatteryAlert(pct);
       }
@@ -2128,24 +2655,187 @@
     // === Phase 流程 ===
     const INTRO_GUIDE_SEGMENTS = [
       "在星辰的尺度下，告别往往无声。\nAt the scale of stars, departures are often silent.",
-      "请为你的卫星命名。\nName your satellite.",
-      "这不仅是一个代号。\nThis is not just a label.\n这是你赋予它的第一份标记。\nIt is the first mark you give it.",
-      "它即将启程。\nIt is about to depart.",
-      "在这段旅程中，\nIn this journey,\n你不再是掌控一切的操作者。\nyou are no longer the one in control.",
-      "你只是它与母体之间，\nYou are only the link between it and its origin,\n那段正在衰减的连接。\na connection that is already fading.",
-      "你会看见一道光晕。\nYou will notice a halo.",
-      "那是它仍能被感知的范围。\nThat is the range where it can still be perceived.",
-      "靠近那里，它会保持稳定。\nStay close, and it remains stable.\n远离那里，它将逐渐失去响应。\nMove away, and it begins to lose response.",
-      "那些迟滞、偏移与不受控，\nDelay, drift, and loss of control\n并不是错误。\nare not errors.",
-      "那是连接正在衰减。\nThey are signs of a fading connection.",
-      "无论你如何维持，\nNo matter how you try to hold it,\n这段关系都无法被永久保留。\nit cannot be sustained forever.",
-      "在彻底失去连接之前，\nBefore the connection is lost,\n它会回望一次。\nit will look back once.",
-      "那是它看向来处。\nIt looks toward where it came from.\n也是你回望起点。\nSo do you.",
-      "这不是一场关于成功的旅程。\nThis is not a journey about success.",
-      "这是关于维持，\nIt is about holding on,\n关于衰减，\nabout fading,\n以及最终的失去。\nand eventually, letting go.",
-      "你可以延缓这一刻，\nYou may delay this moment,\n但无法避免它。\nbut you cannot prevent it.",
-      "祝你旅程愉快。\nEnjoy your journey.",
+      "在这段只有你和他的旅程里，\n结局早已被写下。\nIn this journey between you and him,\nthe ending has already been written.",
+      "这是一场关于维持、衰减，\n以及最终失去的旅程。\nThis is a journey about holding on, fading,\nand eventually losing.",
+      "你或许可以延缓他的告别，\n却无法阻止他的离去。\nYou may delay his departure,\nbut you cannot prevent him from leaving.",
+      "接下来，是你们相遇的开始。\nNow, your encounter begins.",
+      "请为他赋予第一份标记。\n为你的卫星命名。\nGive him his first mark.\nName your satellite.",
     ];
+
+    /** 命名之后、倒计时之前：与开场相同的 IP 对话框文案（含 {voyager}{name} 占位） */
+    const PRE_MISSION_IP_SEGMENTS_RAW = [
+      "{voyager} // {name}\n已接入。我们继续。\nLinked. We continue.",
+      "接下来，我会为您说明如何与他建立连接。\nNext, I will explain how to establish a connection with him.",
+      "您的卫星已经生成在宇宙中。\nYour satellite has now been generated in space.",
+      "请根据他的名字，在大屏中找到他。\nPlease find him on the large screen according to his name.",
+      "手机屏幕下方的摇杆控制器，将连接到这颗专属于您的卫星。\nThe remote controller at the bottom of your phone screen will connect to your own satellite.",
+      "请尽可能让他靠近光晕。\nPlease guide him as close as possible to the halo.",
+      "停留其中，连接会更加稳定。\nStaying within it will make the connection more stable.",
+      "摇杆上方会随机刷新一些他想对您说的话，请及时查看。\nMessages he wants to say to you will randomly appear above the joystick—please check them in time.",
+      "请时刻注意电量。\nPlease keep an eye on the battery level.",
+      "电量归零后，连接将会中断。\nOnce the battery reaches zero, the connection will be lost.",
+      "大屏左下方会记录每一次连接。\nEvery connection will be recorded at the bottom left of the large screen.",
+      "如果您维持得足够久，他也许会出现在那里。\nIf you maintain the connection long enough, he may appear there.",
+      "那么，祝您好运。\nGood luck.",
+    ];
+
+    /** 像素小黑团 + 双眼：挂在 intro-overlay 里、浮在 intro-dialog 上方，不挡正文 */
+    function attachIntroMascotAboveDialog(introOverlay, introDialog) {
+      const CELL = 4;
+      const ROWS = [
+        "..........###########..........",
+        "........###############........",
+        "......###################......",
+        ".....#####################.....",
+        "....#######################....",
+        "...#########################...",
+        "..###########################..",
+        "..########...........########..",
+        "..########...........########..",
+        "..########...........########..",
+        "..########...........########..",
+        "..###########################..",
+        "...#########################...",
+        "....#######################....",
+        ".....#####################.....",
+        "......###################......",
+        ".......#################.......",
+        "........###############........",
+        ".........#############.........",
+      ];
+      const EYE_ROW0 = 7;
+      const EYE_ROW_H = 4;
+      const EYE_W = 2;
+      const EYE_L_COL = 11;
+      const EYE_R_COL = 17;
+
+      const wrap = document.createElement("div");
+      wrap.className = "intro-ip-mascot";
+      wrap.setAttribute("aria-hidden", "true");
+      const inner = document.createElement("div");
+      inner.className = "intro-ip-mascot-inner";
+      inner.style.position = "relative";
+
+      const canvas = document.createElement("canvas");
+      const gw = ROWS[0].length;
+      const gh = ROWS.length;
+      canvas.width = gw;
+      canvas.height = gh;
+      canvas.style.width = `${gw * CELL}px`;
+      canvas.style.height = `${gh * CELL}px`;
+      const ctx = canvas.getContext("2d");
+      const bodyRGB = [11, 13, 24];
+      const fuzzRGB = [58, 68, 88];
+      for (let y = 0; y < gh; y++) {
+        const row = ROWS[y];
+        for (let x = 0; x < row.length; x++) {
+          const c = row[x];
+          if (c === "#") {
+            ctx.fillStyle = `rgb(${bodyRGB.join(",")})`;
+            ctx.fillRect(x, y, 1, 1);
+          } else if (c === "g") {
+            ctx.fillStyle = `rgb(${fuzzRGB.join(",")})`;
+            ctx.fillRect(x, y, 1, 1);
+          }
+        }
+      }
+
+      const eyeL = document.createElement("div");
+      eyeL.className = "intro-ip-eye intro-ip-eye--l";
+      eyeL.style.left = `${EYE_L_COL * CELL}px`;
+      eyeL.style.top = `${EYE_ROW0 * CELL}px`;
+      eyeL.style.width = `${EYE_W * CELL}px`;
+      eyeL.style.height = `${EYE_ROW_H * CELL}px`;
+      const eyeR = document.createElement("div");
+      eyeR.className = "intro-ip-eye intro-ip-eye--r";
+      eyeR.style.left = `${EYE_R_COL * CELL}px`;
+      eyeR.style.top = `${EYE_ROW0 * CELL}px`;
+      eyeR.style.width = `${EYE_W * CELL}px`;
+      eyeR.style.height = `${EYE_ROW_H * CELL}px`;
+
+      inner.appendChild(canvas);
+      inner.appendChild(eyeL);
+      inner.appendChild(eyeR);
+      wrap.appendChild(inner);
+      introOverlay.insertBefore(wrap, introDialog);
+    }
+
+    /**
+     * 与开场相同的 IP 对话框壳（上沿像素吉祥物 + intro-dialog），供 P0 与命名后序章复用。
+     * @param {HTMLElement} parentEl 通常为 centerConsoleEl
+     * @param {{ title?: string }} options
+     */
+    function mountIntroIpOverlay(parentEl, options = {}) {
+      const introOverlay = document.createElement("div");
+      introOverlay.className = "intro-overlay";
+      const introDialog = document.createElement("div");
+      introDialog.className = "intro-dialog";
+      const introTitle = document.createElement("div");
+      introTitle.className = "intro-dialog-title";
+      introTitle.textContent = options.title != null ? options.title : "SYSTEM INTERFACE";
+      const introText = document.createElement("div");
+      introText.className = "intro-dialog-text";
+      const introActions = document.createElement("div");
+      introActions.className = "intro-dialog-actions";
+      const introBtn = document.createElement("button");
+      introBtn.className = "button button-ghost";
+      introActions.appendChild(introBtn);
+      const introDialogInner = document.createElement("div");
+      introDialogInner.className = "intro-dialog-body-wrap";
+      introDialogInner.appendChild(introTitle);
+      introDialogInner.appendChild(introText);
+      introDialogInner.appendChild(introActions);
+      introDialog.appendChild(introDialogInner);
+      introOverlay.appendChild(introDialog);
+      attachIntroMascotAboveDialog(introOverlay, introDialog);
+      parentEl.appendChild(introOverlay);
+      return { introOverlay, introDialog, introTitle, introText, introBtn };
+    }
+
+    async function waitIntroDialogClick(introBtn, label) {
+      introBtn.textContent = label;
+      introBtn.disabled = false;
+      introBtn.style.opacity = "1";
+      await new Promise((resolve) => {
+        introBtn.addEventListener(
+          "click",
+          () => {
+            introBtn.disabled = true;
+            introBtn.style.opacity = "0.65";
+            resolve();
+          },
+          { once: true }
+        );
+      });
+    }
+
+    async function playIntroDialogSegment(introText, introBtn, segmentText, nextLabel, speed = 30) {
+      const skipController = { requested: false };
+      let typingDone = false;
+      introBtn.textContent = nextLabel;
+      introBtn.disabled = false;
+      introBtn.style.opacity = "1";
+
+      const typingPromise = typeText(introText, segmentText, speed, { skipController }).then(() => {
+        typingDone = true;
+      });
+
+      await new Promise((resolve) => {
+        function onClick() {
+          if (!typingDone) {
+            skipController.requested = true;
+            return;
+          }
+          introBtn.disabled = true;
+          introBtn.style.opacity = "0.65";
+          introBtn.removeEventListener("click", onClick);
+          resolve();
+        }
+        introBtn.addEventListener("click", onClick);
+      });
+
+      await typingPromise;
+    }
 
     async function startPhase0() {
       clearPhaseRuntime();
@@ -2183,88 +2873,36 @@
       await new Promise((r) => setTimeout(r, 900));
 
       textLinesEl.innerHTML = "";
-      const introOverlay = document.createElement("div");
-      introOverlay.className = "intro-overlay";
-      const introDialog = document.createElement("div");
-      introDialog.className = "intro-dialog";
-      const introTitle = document.createElement("div");
-      introTitle.className = "intro-dialog-title";
+      const { introOverlay, introTitle, introText, introBtn } = mountIntroIpOverlay(centerConsoleEl, {
+        title: "向导 · 小黑 / GUIDE — LITTLE DARK",
+      });
+
+      const guideOpeningZhEn =
+        "我是这次旅行的向导——小黑。\n很高兴为您服务。\n\n" +
+        "I am Little Dark—your guide on this journey.\nGlad to be here with you.";
+      await typeText(introText, guideOpeningZhEn, 32);
+      await waitIntroDialogClick(introBtn, "继续 / NEXT");
+
       introTitle.textContent = "SYSTEM INTERFACE";
-      const introText = document.createElement("div");
-      introText.className = "intro-dialog-text";
-      const introActions = document.createElement("div");
-      introActions.className = "intro-dialog-actions";
-      const introBtn = document.createElement("button");
-      introBtn.className = "button button-ghost";
-      introActions.appendChild(introBtn);
-      introDialog.appendChild(introTitle);
-      introDialog.appendChild(introText);
-      introDialog.appendChild(introActions);
-      introOverlay.appendChild(introDialog);
-      centerConsoleEl.appendChild(introOverlay);
-
-      async function waitIntroClick(label) {
-        introBtn.textContent = label;
-        introBtn.disabled = false;
-        introBtn.style.opacity = "1";
-        await new Promise((resolve) => {
-          introBtn.addEventListener(
-            "click",
-            () => {
-              introBtn.disabled = true;
-              introBtn.style.opacity = "0.65";
-              resolve();
-            },
-            { once: true }
-          );
-        });
-      }
-
-      await typeText(introText, "你准备好进入旅程了吗\nAre you ready to begin the journey?", 34);
-      await waitIntroClick("确认 / CONTINUE");
-
-      async function playIntroSegment(segmentText, nextLabel) {
-        const skipController = { requested: false };
-        let typingDone = false;
-        introBtn.textContent = nextLabel;
-        introBtn.disabled = false;
-        introBtn.style.opacity = "1";
-
-        const typingPromise = typeText(introText, segmentText, 30, { skipController }).then(() => {
-          typingDone = true;
-        });
-
-        await new Promise((resolve) => {
-          function onClick() {
-            if (!typingDone) {
-              // First click during typing: reveal full current segment.
-              skipController.requested = true;
-              return;
-            }
-            // Second click (after full text shown): advance to next segment.
-            introBtn.disabled = true;
-            introBtn.style.opacity = "0.65";
-            introBtn.removeEventListener("click", onClick);
-            resolve();
-          }
-          introBtn.addEventListener("click", onClick);
-        });
-
-        await typingPromise;
-      }
+      await typeText(
+        introText,
+        "准备好和我一起开始这段旅程了吗\nAre you ready to begin this journey with me?",
+        34
+      );
+      await waitIntroDialogClick(introBtn, "确认 / CONTINUE");
 
       for (let i = 0; i < INTRO_GUIDE_SEGMENTS.length; i++) {
         const seg = INTRO_GUIDE_SEGMENTS[i];
         const isLast = i === INTRO_GUIDE_SEGMENTS.length - 1;
-        await playIntroSegment(seg, isLast ? "进入命名 / CONTINUE" : "继续 / NEXT");
+        await playIntroDialogSegment(introText, introBtn, seg, isLast ? "进入命名 / CONTINUE" : "继续 / NEXT", 30);
       }
 
       introOverlay.remove();
 
       textLinesEl.innerHTML = "";
 
-      const namePromptLine = appendLine("> 为你的探测器命名：");
-      await typeText(namePromptLine, "> 为你的探测器命名：");
+      const namePromptLine = appendLine("> 为您的卫星命名 / Name your satellite:");
+      await typeText(namePromptLine, "> 为您的卫星命名 / Name your satellite:");
 
       const inputRow = document.createElement("div");
       inputRow.className = "input-row";
@@ -2330,20 +2968,32 @@
     }
 
     async function startCountdown() {
-      const lineMission = appendLine(`> ${getVoyagerLabel()} // ${state.name}`);
-      await typeText(lineMission, `> ${getVoyagerLabel()} // ${state.name}`);
-      const lineJourney = appendLine("> 旅程说明：你正在维持一段会衰减的连接。\n> Journey Note: You are sustaining a connection that will decay.");
-      await typeText(
-        lineJourney,
-        "> 旅程说明：你正在维持一段会衰减的连接。\n> Journey Note: You are sustaining a connection that will decay."
+      textLinesEl.innerHTML = "";
+      state.startupVoyagerLineEl = null;
+
+      const voyager = getVoyagerLabel();
+      const name = (state.name || "——").trim();
+      const preMissionSegments = PRE_MISSION_IP_SEGMENTS_RAW.map((tpl) =>
+        tpl.replaceAll("{voyager}", voyager).replaceAll("{name}", name)
       );
-      const lineGoal = appendLine(
-        "> 你可以尝试维持与母体的连接。\n> You may attempt to maintain the connection with the origin.\n\n> 靠近光晕，\n> Stay within the halo,\n> 它会暂时变得稳定。\n> and it will remain stable for a while.\n\n> 有些人，会在那里停留更久。\n> Some remain there longer than others.\n\n> 系统会记录这些时间。\n> The system records these durations.\n\n> 它们被保留下来。\n> They remain,\n> 作为最后的接触。\n> as traces of the last contact.\n\n> 你也可以尝试留在那里。\n> You may try to stay as well.\n\n> 尽可能久一些。\n> For as long as you can.\n\n> 但没有人能一直停留在那里。\n> No one remains there forever."
-      );
-      await typeText(
-        lineGoal,
-        "> 你可以尝试维持与母体的连接。\n> You may attempt to maintain the connection with the origin.\n\n> 靠近光晕，\n> Stay within the halo,\n> 它会暂时变得稳定。\n> and it will remain stable for a while.\n\n> 有些人，会在那里停留更久。\n> Some remain there longer than others.\n\n> 系统会记录这些时间。\n> The system records these durations.\n\n> 它们被保留下来。\n> They remain,\n> 作为最后的接触。\n> as traces of the last contact.\n\n> 你也可以尝试留在那里。\n> You may try to stay as well.\n\n> 尽可能久一些。\n> For as long as you can.\n\n> 但没有人能一直停留在那里。\n> No one remains there forever."
-      );
+
+      const { introOverlay, introText, introBtn } = mountIntroIpOverlay(centerConsoleEl, {
+        title: "VOYAGER LINK",
+      });
+
+      for (let i = 0; i < preMissionSegments.length; i++) {
+        const seg = preMissionSegments[i];
+        const isLast = i === preMissionSegments.length - 1;
+        await playIntroDialogSegment(
+          introText,
+          introBtn,
+          seg,
+          isLast ? "开始倒计时 / START COUNTDOWN" : "继续 / NEXT",
+          28
+        );
+      }
+
+      introOverlay.remove();
 
       countdownEl.classList.add("visible");
       const seq = ["3", "2", "1"];
@@ -2451,6 +3101,7 @@
     }
 
     function startPhase2() {
+      state.disconnectWarnHapticDone = false;
       updateHaloDwell();
       state.phase = Phase.DRIFT;
       state.phaseStartTime = performance.now();
@@ -2471,6 +3122,10 @@
         const t = clamp((performance.now() - start) / state.driftDuration, 0, 1);
         state.sigLevel = lerp(0.98, 0.03, t);
         updateDisplayedSignal();
+        if (!state.disconnectWarnHapticDone && state.sigLevel < 0.2) {
+          vibrate([32, 72, 32, 72, 32, 140]);
+          state.disconnectWarnHapticDone = true;
+        }
         state.dstKm += 15_000 * (0.4 + 0.6 * t);
         updateDstDisplay();
 
@@ -2492,14 +3147,25 @@
       }, 900);
 
       registerTimeout(() => {
-        if (state.phase === Phase.DRIFT) {
+        const tryEndDrift = () => {
+          if (state.phase !== Phase.DRIFT) return;
+          if (state.batteryTenGateActive && !state.batteryTenGateAcked) {
+            registerTimeout(tryEndDrift, 340);
+            return;
+          }
           showPhase2LowBatteryPrompt();
-        }
+        };
+        tryEndDrift();
       }, state.driftDuration);
     }
 
     function showPhase2LowBatteryPrompt() {
       if (state.phase !== Phase.DRIFT) return;
+      if (!state.batteryHaptic5Done) {
+        vibrate([0, 200, 45, 110, 45, 160, 30, 240]);
+      } else {
+        vibrate(95);
+      }
       clearBatteryTick();
       textLinesEl.innerHTML = "";
       joystickWrapperEl.style.display = "none";
@@ -2521,9 +3187,12 @@
       agreeBtn.className = "button button-ghost";
       agreeBtn.textContent = "同意 / AGREE";
       actions.appendChild(agreeBtn);
-      dialog.appendChild(title);
-      dialog.appendChild(body);
-      dialog.appendChild(actions);
+      const dialogInner = document.createElement("div");
+      dialogInner.className = "intro-dialog-body-wrap";
+      dialogInner.appendChild(title);
+      dialogInner.appendChild(body);
+      dialogInner.appendChild(actions);
+      dialog.appendChild(dialogInner);
       overlay.appendChild(dialog);
       centerConsoleEl.appendChild(overlay);
 
@@ -2765,6 +3434,8 @@
       cameraRenderCanvasEl.style.transform = "";
       cameraViewEl.style.display = "none";
 
+      appEl.classList.add("post-camera-outro");
+
       textLinesEl.innerHTML = "";
       const dwellSec = Math.max(0, Math.round(state.haloDwellMs / 1000));
       const recordText = `> ${getVoyagerLabel()}  ${state.name || "——"}  ${dwellSec}s  LOST`;
@@ -2774,6 +3445,7 @@
 
       typeText(l1, "> 相机系统已关闭 / Camera system offline", 50);
       registerTimeout(() => {
+        vibrate([0, 380, 100, 220, 120, 520]);
         const recordBox = document.createElement("div");
         recordBox.className = "lost-record-box";
         const recordLine = document.createElement("div");
@@ -2832,6 +3504,7 @@
 
       registerTimeout(() => {
         textLinesEl.innerHTML = "";
+        textConsoleEl.style.display = "none";
         phase4NarrativeEl.innerHTML =
           "<span class=\"key-line\">这不是你的失败。\nThis was not your failure.</span>\n\n"
           + "连接从一开始就无法被永久维持。\nThe connection was never meant to last.\n\n"
@@ -2839,7 +3512,7 @@
           + "区别只在于，\nThe only difference is\n\n"
           + "谁停留得更久一些。\nhow long each one managed to remain.\n\n"
           + `${getVoyagerLabel()} // LOST\n${getVoyagerLabel()} // LOST`;
-        phase4TextEl.style.display = "block";
+        phase4TextEl.style.display = "flex";
       }, 6000);
 
       registerTimeout(() => {
@@ -2911,7 +3584,9 @@
         const visualMag = clamp(Math.hypot(visualX, visualY), 0, 1);
         const angleDeg = Math.atan2(visualY, visualX) * 180 / Math.PI;
 
-        const phaseDelayCap = state.phase === Phase.ORBIT ? 24 : state.phase === Phase.DRIFT ? 160 : 220;
+        const driftCap =
+          state.phase === Phase.DRIFT && state.batteryTenGateActive && !state.batteryTenGateAcked ? 268 : 160;
+        const phaseDelayCap = state.phase === Phase.ORBIT ? 24 : state.phase === Phase.DRIFT ? driftCap : 220;
         const appliedDelayMs = Math.min(delayMs, phaseDelayCap);
 
         const send = () => {
