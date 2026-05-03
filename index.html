@@ -602,11 +602,12 @@
       padding: 4px 10px;
     }
 
-    /* 摇杆区：限制高度 + 底部留白，避免贴 Home 条 / 遮挡进度条 */
+    /* 摇杆区：底部留白；圆形摇杆用固定宽高变量，避免小屏 flex 挤压成椭圆 */
     .joystick-wrapper {
-      flex: 0 1 auto;
+      flex: 0 0 auto;
+      flex-shrink: 0;
+      width: 100%;
       min-height: 0;
-      max-height: min(42vh, 300px);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -639,9 +640,20 @@
 
     .joystick {
       position: relative;
-      width: min(260px, 78%);
-      aspect-ratio: 1;
-      max-width: min(320px, calc(100% - 24px));
+      box-sizing: border-box;
+      flex-shrink: 0;
+      /* 宽高同一表达式 → 任意视口下保持正圆，不因剩余高度被纵向压扁 */
+      --joystick-size: min(
+        260px,
+        calc(100% - 24px),
+        calc(100vw - 48px),
+        calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 240px)
+      );
+      width: var(--joystick-size);
+      height: var(--joystick-size);
+      max-width: calc(100% - 24px);
+      max-height: var(--joystick-size);
+      aspect-ratio: 1 / 1;
       border-radius: 50%;
       background: radial-gradient(circle at 30% 20%, #3f3f3f 0, #0c0c0c 50%, #000 100%);
       box-shadow:
@@ -1210,7 +1222,7 @@
       background: linear-gradient(180deg, rgba(255, 170, 90, 0.07), rgba(0, 0, 0, 0.08));
       border-radius: 8px;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-      max-height: min(220px, 42dvh);
+      max-height: min(280px, 48dvh);
       min-height: 0;
       overflow-x: hidden;
       overflow-y: auto;
@@ -1219,8 +1231,8 @@
     }
 
     .satellite-dialog-body {
-      font-size: 14px;
-      line-height: 1.6;
+      font-size: clamp(13px, 3.5vw, 14px);
+      line-height: 1.65;
       color: rgba(255, 210, 155, 0.94);
       white-space: pre-line;
       word-break: break-word;
@@ -1234,12 +1246,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       pointer-events: auto;
       background: rgba(3, 6, 14, 0.46);
       padding: max(6px, var(--safe-top)) max(8px, var(--safe-right)) max(8px, var(--safe-bottom)) max(8px, var(--safe-left));
       box-sizing: border-box;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
       min-height: 0;
       -webkit-overflow-scrolling: touch;
     }
@@ -1250,7 +1263,9 @@
       box-sizing: border-box;
       width: 100%;
       max-width: min(520px, 100%);
-      max-height: 100%;
+      margin: auto 0;
+      flex: 0 1 auto;
+      max-height: min(88dvh, calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px));
       min-height: 0;
       flex-shrink: 1;
       padding: 16px 12px 12px 12px;
@@ -1382,8 +1397,8 @@
     .warning-body {
       flex: 1 1 auto;
       min-height: 0;
-      font-size: 14px;
-      line-height: 1.7;
+      font-size: clamp(13px, 3.7vw, 15px);
+      line-height: 1.65;
       color: rgba(255, 214, 190, 0.95);
       white-space: pre-line;
       word-break: break-word;
@@ -1457,18 +1472,23 @@
         font-size: 12px;
       }
 
-      .joystick-wrapper {
-        max-height: min(38vh, 260px);
+      .joystick {
+        --joystick-size: min(
+          240px,
+          calc(100% - 24px),
+          calc(100vw - 48px),
+          calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 220px)
+        );
       }
 
       .satellite-dialog {
-        max-height: min(200px, 38dvh);
+        max-height: min(260px, 46dvh);
         padding: 8px 10px;
       }
 
       .satellite-dialog-body {
-        font-size: 12px;
-        line-height: 1.45;
+        font-size: clamp(13px, 3.5vw, 14px);
+        line-height: 1.55;
       }
 
       @keyframes intro-ip-patrol {
@@ -1480,21 +1500,32 @@
         padding-top: 12px;
         padding-left: 10px;
         padding-right: 10px;
+        max-height: min(90dvh, calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12px));
       }
     }
 
     @media (max-height: 580px) {
       .satellite-dialog {
-        max-height: min(160px, 32dvh);
+        max-height: min(220px, 44dvh);
       }
 
       .satellite-dialog-body {
-        font-size: 11px;
+        font-size: clamp(12px, 3.4vw, 13px);
+        line-height: 1.55;
       }
 
       .app.phase-4 .phase4-narrative {
         font-size: 11px;
         line-height: 1.45;
+      }
+
+      .joystick {
+        --joystick-size: min(
+          220px,
+          calc(100% - 20px),
+          calc(100vw - 40px),
+          calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 200px)
+        );
       }
     }
 
