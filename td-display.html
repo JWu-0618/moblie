@@ -736,6 +736,7 @@
           lostBlinkUntil: 0,
           spawnTime: 0,
           spawnDurationMs: 0,
+          crowdDim: 1,
         });
       }
       return sats.get(id);
@@ -1468,11 +1469,12 @@
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       for (const link of interLinks) {
-        const alpha = 0.18 + link.strength * 0.5;
+        const crowd = link.crowd != null ? link.crowd : 1;
+        const alpha = (0.1 + link.strength * 0.34) * crowd;
         const pa = pullTowardCenter(link.a.x, link.a.y);
         const pb = pullTowardCenter(link.b.x, link.b.y);
         ctx.strokeStyle = `rgba(255, 188, 118, ${alpha})`;
-        ctx.lineWidth = 1.2 + link.strength * 1.8;
+        ctx.lineWidth = 0.55 + link.strength * 0.95;
         ctx.setLineDash([3, 6]);
         ctx.lineDashOffset = -t * 0.018 + link.phase * 3;
         ctx.beginPath();
@@ -1483,8 +1485,8 @@
 
         const mx = (pa.x + pb.x) * 0.5;
         const my = (pa.y + pb.y) * 0.5;
-        const p = 1.2 + link.strength * 2.2;
-        ctx.fillStyle = `rgba(255,220,180,${0.12 + link.strength * 0.42})`;
+        const p = 0.85 + link.strength * 1.35;
+        ctx.fillStyle = `rgba(255,220,180,${(0.08 + link.strength * 0.28) * crowd})`;
         ctx.beginPath();
         ctx.arc(mx + Math.sin(t * 0.002 + link.phase) * 1.5, my + Math.cos(t * 0.002 + link.phase) * 1.5, p, 0, Math.PI * 2);
         ctx.fill();
@@ -1634,6 +1636,73 @@
       targetCtx.restore();
     }
 
+    /** 连线中点附近卫星密度 → 降低透明度减轻粘连感 */
+    function interLinkCrowdFactor(a, b, satList) {
+      const mx = (a.x + b.x) * 0.5;
+      const my = (a.y + b.y) * 0.5;
+      const R = Math.min(W, H) * 0.072;
+      let n = 0;
+      for (const s of satList) {
+        if (s.historical) continue;
+        if (Math.hypot(s.x - mx, s.y - my) < R) n++;
+      }
+      if (n <= 2) return 1;
+      if (n === 3) return 0.84;
+      return clamp(1 - (n - 2) * 0.13, 0.4, 1);
+    }
+
+    /** 多颗非历史卫星之间保持最小间距 + 轻微排斥 */
+    function applySatelliteSeparation(satList, dt) {
+      const MIN_D = Math.min(W, H) * 0.044;
+      const MIN_D2 = MIN_D * MIN_D;
+      const K = 0.0051;
+      for (let i = 0; i < satList.length; i++) {
+        const a = satList[i];
+        if (a.historical) continue;
+        for (let j = i + 1; j < satList.length; j++) {
+          const b = satList[j];
+          if (b.historical) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= MIN_D2 || d2 < 1e-8) continue;
+          const d = Math.sqrt(d2);
+          const ux = dx / d;
+          const uy = dy / d;
+          const pen = (MIN_D - d) / MIN_D;
+          let f = pen * pen * K * dt;
+          if (a.legacy && b.legacy) f *= 0.5;
+          else if (a.legacy !== b.legacy) f *= 0.78;
+          a.vx -= ux * f;
+          a.vy -= uy * f;
+          b.vx += ux * f;
+          b.vy += uy * f;
+        }
+      }
+    }
+
+    function updateSatelliteCrowding(satList) {
+      const R = Math.min(W, H) * 0.052;
+      const r2 = R * R;
+      for (const s of satList) {
+        if (s.historical) {
+          s.crowdDim = 1;
+          continue;
+        }
+        let n = 0;
+        for (const o of satList) {
+          if (o === s || o.historical) continue;
+          const dx = o.x - s.x;
+          const dy = o.y - s.y;
+          if (dx * dx + dy * dy < r2) n++;
+        }
+        if (n <= 0) s.crowdDim = 1;
+        else if (n === 1) s.crowdDim = 0.9;
+        else if (n === 2) s.crowdDim = 0.76;
+        else s.crowdDim = clamp(0.68 - (n - 2) * 0.07, 0.48, 0.68);
+      }
+    }
+
     function triggerGroupEvent(t) {
       const types = ["group-drift", "signal-storm", "local-freeze"];
       const type = types[Math.floor(Math.random() * types.length)];
@@ -1652,6 +1721,7 @@
       interLinks = [];
       const radius = Math.min(W, H) * 0.3;
       const r2 = radius * radius;
+      const MIN_PAIR_SEP = Math.min(W, H) * 0.046;
 
       for (const field of hiddenFields) {
         field.phase += dt * 0.00008;
@@ -1720,23 +1790,40 @@
           const ux = dx / d;
           const uy = dy / d;
 
-          // 关系拉扯：保持轻微但可感知（P1/P2/P3 都成立）
-          const pull = n * 0.0022 * dt;
+          // 过近时减弱「拉拢」，避免与排斥对冲后仍粘在一起
+          const pullEase = d < MIN_PAIR_SEP * 2.8 ? clamp(d / (MIN_PAIR_SEP * 2.8), 0.18, 1) : 1;
+          const pull = n * 0.0022 * dt * pullEase;
           a.vx += ux * pull;
           a.vy += uy * pull;
           b.vx -= ux * pull;
           b.vy -= uy * pull;
 
-          // 输入外溢：附近个体互相影响
-          const spill = n * 0.09;
+          if (d < MIN_PAIR_SEP && d > 0.5) {
+            const pen = (MIN_PAIR_SEP - d) / MIN_PAIR_SEP;
+            const sep = pen * pen * 0.0046 * dt;
+            a.vx -= ux * sep;
+            a.vy -= uy * sep;
+            b.vx += ux * sep;
+            b.vy += uy * sep;
+          }
+
+          // 输入外溢：附近个体互相影响（近距略减弱）
+          const spill = n * 0.09 * pullEase;
           a.vx += b.appliedJoyX * spill * 0.0009 * dt;
           a.vy += b.appliedJoyY * spill * 0.0009 * dt;
           b.vx += a.appliedJoyX * spill * 0.0009 * dt;
           b.vy += a.appliedJoyY * spill * 0.0009 * dt;
 
-          a.linkBoost = Math.max(a.linkBoost || 0, n);
-          b.linkBoost = Math.max(b.linkBoost || 0, n);
-          interLinks.push({ a, b, strength: n, phase: (i * 17 + j * 31) * 0.1 });
+          const boostMag = n * (d < MIN_PAIR_SEP * 2 ? clamp(d / (MIN_PAIR_SEP * 2), 0.35, 1) : 1);
+          a.linkBoost = Math.max(a.linkBoost || 0, boostMag);
+          b.linkBoost = Math.max(b.linkBoost || 0, boostMag);
+          interLinks.push({
+            a,
+            b,
+            strength: n,
+            phase: (i * 17 + j * 31) * 0.1,
+            crowd: interLinkCrowdFactor(a, b, satList),
+          });
         }
       }
     }
@@ -1807,9 +1894,11 @@
         col = `hsla(${hue}, 92%, 70%, ${0.95 * phaseBright})`;
       }
 
+      const crowdDim = s.crowdDim != null ? s.crowdDim : 1;
+
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = fadeDim * spawnAlpha;
+      ctx.globalAlpha = fadeDim * spawnAlpha * crowdDim;
       const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, glow * spawnGlowBoost);
       g.addColorStop(0, col);
       g.addColorStop(0.4, col.replace("0.95", "0.35").replace("0.75", "0.25").replace("0.5", "0.2"));
@@ -1872,7 +1961,7 @@
         }
         if (!hideLabel) {
           ctx.save();
-          ctx.globalAlpha = fadeDim;
+          ctx.globalAlpha = fadeDim * crowdDim;
           ctx.font = "10px ui-monospace, Menlo, monospace";
           const phaseLabelDim = s.phase >= 4 ? 0.5 : s.phase === 2 ? 0.72 : 1;
           ctx.fillStyle = `hsla(${hue}, 92%, 76%, ${0.55 * legacyDim * connDim * phaseLabelDim})`;
@@ -2093,7 +2182,9 @@
 
       const activeSatList = [...sats.values()].filter((s) => s.phase <= 4);
       applyHiddenFieldsAndLinks(activeSatList, dt, tt);
+      applySatelliteSeparation(activeSatList, dt);
       applyGroupEvent(activeSatList, dt, tt);
+      updateSatelliteCrowding(activeSatList);
 
       const list = [...sats.values()].sort((a, b) => (a.legacy ? -1 : 0) - (b.legacy ? -1 : 0));
       for (const s of list) {
