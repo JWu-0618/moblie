@@ -288,9 +288,9 @@
       if (contactRecordSeeded || bestContactById.size > 0) return;
       contactRecordSeeded = true;
       const seeds = [
-        { id: "seed-rec-1", voyagerNum: 3, name: "TRACE-A", bestMs: 3000, lost: true },
-        { id: "seed-rec-2", voyagerNum: 7, name: "TRACE-B", bestMs: 5000, lost: true },
-        { id: "seed-rec-3", voyagerNum: 11, name: "TRACE-C", bestMs: 7000, lost: true },
+        { id: "seed-rec-1", voyagerNum: 3, name: "TRACE-A", bestMs: 3000, lost: false },
+        { id: "seed-rec-2", voyagerNum: 7, name: "TRACE-B", bestMs: 5000, lost: false },
+        { id: "seed-rec-3", voyagerNum: 11, name: "TRACE-C", bestMs: 7000, lost: false },
       ];
       for (const rec of seeds) bestContactById.set(rec.id, rec);
     }
@@ -325,7 +325,8 @@
         voyagerNum: s.voyagerNum || prev?.voyagerNum || 0,
         name: (s.name && s.name.trim()) ? s.name.trim() : (prev?.name || "——"),
         bestMs,
-        lost: forceLost || prev?.lost || s.disconnected || s.ended || s.legacy,
+        /* LOST 仅在与观众旅程正式结束（移动端 type:end）对应；不因信号跌落或静音断线提前标红 */
+        lost: !!(forceLost || prev?.lost),
       });
     }
 
@@ -934,7 +935,7 @@
       s.inputQueue = [];
       s.flashUntil = now + 260;
       s.disconnected = true;
-      archiveLostRecord(s);
+      /* 短时无摇杆包常见于读文案/松手，不应在观众仍在流程中时标 LOST；仅移动端 type:end 归档 */
     }
 
     function reviveSatFromInput(s) {
@@ -2071,11 +2072,11 @@
         const inevitableDecay = getInevitableDecay(s, now);
         s.connection = clamp(spatialConnection * inevitableDecay, 0, 1);
 
+        /* 连接值走低是画面演出，不代表观众已结束旅程；勿写入 Connection Log 的 LOST */
         if (!s.disconnected && s.prevConnection > 0.1 && s.connection <= 0.05) {
           s.disconnected = true;
           s.flashUntil = performance.now() + 400;
           earth.flashUntil = performance.now() + 240;
-          archiveLostRecord(s);
         }
 
         if (!s.ended) {
